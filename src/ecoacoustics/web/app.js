@@ -199,7 +199,10 @@ async function pollStatus() {
       updateStateBanner(state.status.pipelines || {});
       // Update status-derived stat cards directly from what we already have
       const windowEl = document.getElementById('stat-window')?.querySelector('.value');
-      if (windowEl) windowEl.textContent = state.status.schedule?.active_window || 'None';
+      if (windowEl) {
+        const anyRunning = Object.values(state.status.pipelines || {}).find(p => p.state !== 'idle');
+        windowEl.textContent = anyRunning?.window || '—';
+      }
       const diskEl = document.getElementById('stat-disk')?.querySelector('.value');
       if (diskEl) diskEl.textContent = state.status.disk_free_gb ?? '—';
       refreshDevicePanel();
@@ -1097,6 +1100,10 @@ async function renderReports() {
           <label>Species</label>
           <select id="r-species" style="min-width:180px"><option value="">All species</option></select>
         </div>
+        <div class="form-group">
+          <label>Location</label>
+          <select id="r-location" style="min-width:160px"><option value="">All locations</option></select>
+        </div>
         <div class="form-group" style="justify-content:flex-end">
           <button class="btn btn-primary" id="btn-load-report">Load Report</button>
         </div>
@@ -1115,7 +1122,7 @@ async function renderReports() {
         <button class="btn btn-outline" id="btn-dl-sessions">⬇ Sessions CSV</button>
       </div>
       <p style="font-size:0.75rem;color:var(--muted);margin-top:10px">
-        Downloads respect the date range and species filter selected above.
+        Downloads respect the date range, species, and location filters selected above.
       </p>
     </div>
 
@@ -1127,11 +1134,11 @@ async function renderReports() {
     <div class="card">
       <div class="card-title">Download</div>
       <div class="download-row">
-        <button class="btn btn-outline" id="btn-dl-detections">⬇ Detections CSV</button>
-        <button class="btn btn-outline" id="btn-dl-sessions">⬇ Sessions CSV</button>
+        <button class="btn btn-outline" id="btn-dl-detections2">⬇ Detections CSV</button>
+        <button class="btn btn-outline" id="btn-dl-sessions2">⬇ Sessions CSV</button>
       </div>
       <p style="font-size:0.75rem;color:var(--muted);margin-top:10px">
-        Downloads respect the date range and species filter selected above.
+        Downloads respect the date range, species, and location filters selected above.
       </p>
     </div>
 
@@ -1147,11 +1154,12 @@ async function renderReports() {
   document.getElementById('btn-load-report').addEventListener('click', loadReport);
   document.getElementById('btn-dl-detections').addEventListener('click', () => downloadReport('detections'));
   document.getElementById('btn-dl-sessions').addEventListener('click', () => downloadReport('sessions'));
+  document.getElementById('btn-dl-detections2').addEventListener('click', () => downloadReport('detections'));
+  document.getElementById('btn-dl-sessions2').addEventListener('click', () => downloadReport('sessions'));
   document.getElementById('btn-clear-logs').addEventListener('click', confirmClearLogs);
   document.getElementById('r-type').addEventListener('change', refreshReportSpecies);
 
-  // Populate species dropdown for initial "all" selection
-  await refreshReportSpecies();
+  await Promise.all([refreshReportSpecies(), refreshReportLocations()]);
 }
 
 async function refreshReportSpecies() {
@@ -1167,6 +1175,16 @@ async function refreshReportSpecies() {
   } catch (_) {}
 }
 
+async function refreshReportLocations() {
+  const el = document.getElementById('r-location');
+  if (!el) return;
+  try {
+    const data = await api.get('/api/reports/locations');
+    el.innerHTML = '<option value="">All locations</option>' +
+      data.locations.map(l => `<option value="${escHtml(l)}">${escHtml(l)}</option>`).join('');
+  } catch (_) {}
+}
+
 async function loadReport() {
   const btn = document.getElementById('btn-load-report');
   const from = document.getElementById('r-from').value;
@@ -1176,14 +1194,17 @@ async function loadReport() {
   const el = document.getElementById('report-content');
   el.innerHTML = '<div class="empty">Loading...</div>';
   btnLoad(btn, '⟳ Loading...');
+  const location = document.getElementById('r-location')?.value || '';
   const classifierParam = classifier && classifier !== 'all' ? `&classifier=${classifier}` : '';
   const speciesParam = species ? `&species=${encodeURIComponent(species)}` : '';
+  const locationParam = location ? `&location=${encodeURIComponent(location)}` : '';
   try {
-    const data = await api.get(`/api/reports/summary?date_from=${from}&date_to=${to}${classifierParam}${speciesParam}`);
+    const data = await api.get(`/api/reports/summary?date_from=${from}&date_to=${to}${classifierParam}${speciesParam}${locationParam}`);
     const filterLabel = data.species ? ` — ${data.species}` : '';
     if (!data.days.length) { el.innerHTML = `<div class="empty">No data for this period${filterLabel}.</div>`; return; }
     el.innerHTML = `
       ${data.species ? `<p style="font-size:0.82rem;color:var(--accent);margin-bottom:12px">Filtered: ${data.species}</p>` : ''}
+      ${location ? `<p style="font-size:0.82rem;color:var(--accent);margin-bottom:12px">Location: ${escHtml(location)}</p>` : ''}
       <div class="grid-2" style="margin-bottom:16px">
         <div class="stat"><div class="value">${data.totals.sessions}</div><div class="label">Sessions</div></div>
         <div class="stat"><div class="value">${data.totals.total_calls}</div><div class="label">Total calls</div></div>
@@ -1195,20 +1216,21 @@ async function loadReport() {
         </tbody>
       </table>`;
     // Load heatmaps in parallel
-    loadHeatmaps(from, to, classifierParam.replace('&classifier=',''));
+    loadHeatmaps(from, to, classifierParam.replace('&classifier=',''), locationParam.replace('&location=',''));
   } catch (err) {
     el.innerHTML = `<div class="empty" style="color:var(--danger)">${err.message}</div>`;
     toast(err.message, 'error', 6000);
   } finally { btnDone(btn); }
 }
 
-async function loadHeatmaps(from, to, classifier) {
+async function loadHeatmaps(from, to, classifier, location) {
   const el = document.getElementById('heatmap-section');
   if (!el) return;
   el.innerHTML = '<div class="heatmap-empty">Loading heatmaps…</div>';
   try {
     let url = `/api/reports/heatmap?date_from=${from}&date_to=${to}`;
     if (classifier) url += `&classifier=${classifier}`;
+    if (location) url += `&location=${encodeURIComponent(location)}`;
     const data = await api.get(url);
     const species = Object.keys(data.by_hour);
     if (!species.length) { el.innerHTML = '<div class="heatmap-empty">No data to display.</div>'; return; }
@@ -1284,9 +1306,11 @@ function downloadReport(type) {
   const to = document.getElementById('r-to')?.value || '';
   const classifier = document.getElementById('r-type')?.value || 'all';
   const species = document.getElementById('r-species')?.value || '';
+  const location = document.getElementById('r-location')?.value || '';
   let url = `/api/reports/download/${type}?date_from=${from}&date_to=${to}`;
   if (classifier && classifier !== 'all') url += `&classifier=${classifier}`;
   if (species) url += `&species=${encodeURIComponent(species)}`;
+  if (location) url += `&location=${encodeURIComponent(location)}`;
   const a = document.createElement('a');
   a.href = url; a.download = ''; a.click();
 }

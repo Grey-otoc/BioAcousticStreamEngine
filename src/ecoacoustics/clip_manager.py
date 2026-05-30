@@ -134,7 +134,7 @@ class ClipManager:
             Number of WAV files removed.
         """
         removed = 0
-        all_clips = sorted(self._clips_dir.rglob("*.wav"), key=_conf_from_path)
+        all_clips = sorted(self._clips_dir.rglob("*.wav"))  # oldest first (YYYYMMDD prefix)
         for clip in all_clips:
             if self.disk_free_mb() >= target_free_mb:
                 break
@@ -157,11 +157,6 @@ class ClipManager:
 
         total = self._db[species]["total_detections"]
         n_clips = self._clip_count(species)
-
-        if n_clips >= self._max_clips:
-            # Only save if this clip beats the worst one already stored
-            worst = self._worst_confidence(species)
-            return worst is not None and confidence > worst
 
         if total < _RARE_THRESHOLD:
             return True  # locally rare — preserve every confident detection
@@ -190,28 +185,22 @@ class ClipManager:
         return path
 
     def _enforce_limit(self, species: str) -> None:
-        """Remove the lowest-confidence clip(s) until the species is within the cap."""
+        """Remove oldest clip(s) until the species is within the cap.
+
+        Clips are named with a YYYYMMDD_HHMMSS prefix so lexicographic sort
+        is chronological — the first entry is always the oldest recording.
+        """
         species_dir = self._clips_dir / _safe_dirname(species)
         if not species_dir.exists():
             return
         clips = sorted(species_dir.glob("*.wav"))
         while len(clips) > self._max_clips:
-            worst = min(clips, key=_conf_from_path)
-            worst.unlink(missing_ok=True)
-            clips.remove(worst)
+            clips.pop(0).unlink(missing_ok=True)
 
     def _clip_count(self, species: str) -> int:
         """Return the number of WAV files currently stored for a species."""
         d = self._clips_dir / _safe_dirname(species)
         return len(list(d.glob("*.wav"))) if d.exists() else 0
-
-    def _worst_confidence(self, species: str) -> Optional[float]:
-        """Return the lowest confidence score among stored clips for a species."""
-        d = self._clips_dir / _safe_dirname(species)
-        if not d.exists():
-            return None
-        clips = list(d.glob("*.wav"))
-        return _conf_from_path(min(clips, key=_conf_from_path)) if clips else None
 
     # ------------------------------------------------------------------
     # Species registry

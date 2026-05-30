@@ -61,6 +61,17 @@ def _pactl_sources() -> list[dict]:
     except Exception:
         pass
 
+    # Deduplicate labels for identical devices (e.g. two of the same USB mic model)
+    from collections import Counter
+    counts = Counter(s["label"] for s in sources)
+    seen: dict[str, int] = {}
+    for s in sources:
+        lbl = s["label"]
+        if counts[lbl] > 1:
+            n = seen.get(lbl, 0) + 1
+            seen[lbl] = n
+            s["label"] = f"{lbl} ({n})"
+
     return sources
 
 

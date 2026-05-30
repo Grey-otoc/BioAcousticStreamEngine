@@ -25,9 +25,27 @@ def _paths() -> tuple[Path, Path]:
     )
 
 
+@router.get("/reports/locations")
+def list_locations():
+    """All unique location_name values in detections.csv."""
+    det_path, _ = _paths()
+    if not det_path.exists():
+        return {"locations": []}
+    locations: set[str] = set()
+    with open(det_path) as f:
+        for row in csv.DictReader(f):
+            loc = row.get("location_name", "").strip()
+            if loc:
+                locations.add(loc)
+    return {"locations": sorted(locations)}
+
+
 @router.get("/reports/species")
-def list_species(classifier: Optional[str] = Query(None)):
-    """All unique species in detections.csv, optionally filtered by classifier."""
+def list_species(
+    classifier: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
+):
+    """All unique species in detections.csv, optionally filtered by classifier/location."""
     det_path, _ = _paths()
     if not det_path.exists():
         return {"species": []}
@@ -35,6 +53,8 @@ def list_species(classifier: Optional[str] = Query(None)):
     with open(det_path) as f:
         for row in csv.DictReader(f):
             if classifier and row.get("classifier", "") != classifier:
+                continue
+            if location and row.get("location_name", "") != location:
                 continue
             s = row.get("species_common", "").strip()
             if s:
@@ -48,6 +68,7 @@ def summary_report(
     date_to: Optional[str] = Query(None),
     species: Optional[str] = Query(None),
     classifier: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
 ):
     det_path, sess_path = _paths()
     date_from = date_from or (date.today() - timedelta(days=7)).strftime("%Y-%m-%d")
@@ -55,7 +76,7 @@ def summary_report(
 
     # When filtering by species, read detections.csv (has species_common per row)
     # Otherwise read sessions.csv for aggregated daily totals
-    if species or classifier:
+    if species or classifier or location:
         by_date: dict[str, dict] = {}
         if det_path.exists():
             with open(det_path) as f:
@@ -63,6 +84,8 @@ def summary_report(
                     if species and row.get("species_common", "") != species:
                         continue
                     if classifier and row.get("classifier", "") != classifier:
+                        continue
+                    if location and row.get("location_name", "") != location:
                         continue
                     d = row.get("date", "")
                     if not (date_from <= d <= date_to):
@@ -87,6 +110,8 @@ def summary_report(
                 for row in csv.DictReader(f):
                     d = row.get("date", "")
                     if not (date_from <= d <= date_to):
+                        continue
+                    if location and row.get("location_name", "") != location:
                         continue
                     if d not in by_date:
                         by_date[d] = {"date": d, "sessions": 0, "species_set": set(), "total_calls": 0}
@@ -123,6 +148,7 @@ def download_detections(
     date_to: Optional[str] = Query(None),
     species: Optional[str] = Query(None),
     classifier: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
 ):
     det_path, _ = _paths()
     date_from = date_from or ""
@@ -144,6 +170,8 @@ def download_detections(
                     continue
                 if classifier and row.get("classifier", "") != classifier:
                     continue
+                if location and row.get("location_name", "") != location:
+                    continue
                 if writer is None:
                     writer = csv.DictWriter(output, fieldnames=reader.fieldnames)
                     writer.writeheader()
@@ -164,6 +192,7 @@ def download_sessions(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     species: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
 ):
     _, sess_path = _paths()
     date_from = date_from or ""
@@ -182,6 +211,8 @@ def download_sessions(
                 if d > date_to:
                     continue
                 if species and row.get("species", "") != species:
+                    continue
+                if location and row.get("location_name", "") != location:
                     continue
                 if writer is None:
                     writer = csv.DictWriter(output, fieldnames=reader.fieldnames)
@@ -203,6 +234,7 @@ def heatmap(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     classifier: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
 ):
     """Return detection counts bucketed by hour-of-day and month for heatmap rendering."""
     det_path, _ = _paths()
@@ -225,6 +257,8 @@ def heatmap(
                     continue
                 clf = row.get("classifier", "")
                 if classifier and clf != classifier:
+                    continue
+                if location and row.get("location_name", "") != location:
                     continue
                 species = row.get("species_common", "").strip()
                 if not species:
