@@ -142,6 +142,8 @@ class Pipeline:
         self._processors: dict[str, AudioProcessor] = {}
 
         clf_devices = self._cfg.get("classifiers", {}).get("devices", {})
+        # Optional per-classifier monitoring location name (e.g. "Garden") shown on detection cards.
+        self._clf_locations: dict[str, str] = self._cfg.get("classifiers", {}).get("locations", {})
         default_device = self._cfg["audio"].get("device")
         max_queue_size = self._cfg["audio"].get("max_queue_size", 20)
 
@@ -345,6 +347,11 @@ class Pipeline:
 
                 with self._detection_time_lock:
                     self._last_detection_time[clf.name] = time.time()
+
+                mic_loc = self._clf_locations.get(clf.name, "")
+                if mic_loc:
+                    for det in detections:
+                        det.metadata.setdefault("mic_name", mic_loc)
 
                 self._logger.log(detections, session)
 

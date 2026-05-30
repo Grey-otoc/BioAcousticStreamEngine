@@ -282,6 +282,8 @@ function renderGallery(flashName) {
 function galleryCard(entry) {
   const { det, key, count, bestConf, firstSeen, lastSeen } = entry;
   const pct = Math.round(bestConf * 100);
+  const locParts = [det.location_name, det.mic_name].filter(Boolean);
+  const locDisplay = locParts.join(' · ');
 
   return `
     <div class="gallery-card" id="card-${key}" onclick="showSpeciesDetail('${det.species_common.replace(/'/g, "\\'")}')">
@@ -298,7 +300,7 @@ function galleryCard(entry) {
         <div class="card-sci">${det.species_scientific || ''}</div>
         <div class="card-meta-row">
           ${det.classifier ? `<span class="card-clf">${det.classifier}</span>` : ''}
-          ${det.location_name ? `<span class="card-loc-badge">📍 ${det.location_name}</span>` : ''}
+          ${locDisplay ? `<span class="card-loc-badge">📍 ${locDisplay}</span>` : ''}
         </div>
         <div class="card-times">
           <span title="First detected">⬆ ${_fmtSeen(firstSeen?.date, firstSeen?.time)}</span>

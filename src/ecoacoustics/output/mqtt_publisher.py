@@ -116,6 +116,7 @@ class MqttPublisher:
             "confidence": round(det.confidence, 4),
             "call_number_in_session": call_n,
             "location_name": self._location_name,
+            "mic_name": det.metadata.get("mic_name", ""),
             "latitude": self._lat,
             "longitude": self._lon,
         }
