@@ -17,6 +17,7 @@ Author: David Green, Blenheim Palace
 """
 
 import concurrent.futures
+import logging
 import math
 import queue
 import signal
@@ -40,6 +41,7 @@ from ecoacoustics.session import Session
 from ecoacoustics.watchdog import Watchdog
 
 _console = Console()
+_log = logging.getLogger(__name__)
 
 # Consecutive classify() failures before attempting an in-place model reload
 _MAX_ERRORS_BEFORE_RELOAD = 5
@@ -144,14 +146,21 @@ class Pipeline:
         max_queue_size = self._cfg["audio"].get("max_queue_size", 20)
 
         for clf in self._classifiers:
-            # device_override (set when user manually starts a specific device from the UI)
-            # takes full precedence so that "Start USB Mic" routes ALL classifiers to USB.
-            # Per-classifier assignments in classifiers.devices only apply when running
-            # in scheduled/automated mode (device_override=None).
-            if device_override is not None:
+            # Device routing priority (highest first):
+            #   1. Explicit per-classifier assignment in classifiers.devices (always respected,
+            #      so e.g. a soil probe on a USB mic stays on that mic regardless of which
+            #      UI "Start" button was pressed).
+            #   2. device_override — applies only to classifiers without an explicit assignment,
+            #      so clicking "Start Built-in Mic" routes unassigned classifiers there.
+            #   3. audio.device — the global default fallback.
+            explicit = clf_devices.get(clf.name)  # None when key absent or value is null
+            if explicit:
+                _device = explicit
+            elif device_override is not None:
                 _device = device_override
             else:
-                _device = clf_devices.get(clf.name) or default_device
+                _device = default_device
+            _log.debug("Pipeline: %s → device=%s (explicit=%s, override=%s)", clf.name, _device, explicit, device_override)
             _key = (clf.sample_rate, str(_device))
             self._clf_capture_key[clf.name] = _key
             if _key not in self._captures:

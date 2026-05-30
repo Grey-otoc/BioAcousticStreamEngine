@@ -27,6 +27,7 @@ let mqttClient  = null;
 let db          = null;
 let probabilityThreshold = 0; // 0.0–1.0; set via &probability=N URL param
 let locationFilter = '';      // set via &location=Name URL param
+let siteName = '';            // populated from first MQTT detection's location_name
 const imageVariants = {};     // key → count of available images (from manifest.json)
 
 // ── Settings (localStorage) ──────────────────────────────────────────────────
@@ -238,9 +239,22 @@ function updateGallery(det) {
     e.lastSeenTs = ts;
   }
 
+  if (!siteName && det.location_name) {
+    siteName = det.location_name;
+    const siteEl = document.getElementById('live-site-text');
+    if (siteEl) siteEl.textContent = siteName;
+  }
+
   saveGalleryToStorage();
   renderGallery(name);
   playDetectionSound(key);
+}
+
+function getFilteredEntries() {
+  return Object.values(gallery)
+    .filter(e => e.bestConf >= probabilityThreshold)
+    .filter(e => !locationFilter || (e.det.location_name || '').toLowerCase() === locationFilter.toLowerCase())
+    .sort((a, b) => (b.lastSeenTs || 0) - (a.lastSeenTs || 0));
 }
 
 function renderGallery(flashName) {
@@ -248,18 +262,18 @@ function renderGallery(flashName) {
   const empty = document.getElementById('empty-state');
   if (!grid) return;
 
-  const entries = Object.values(gallery)
-    .filter(e => e.bestConf >= probabilityThreshold)
-    .filter(e => !locationFilter || (e.det.location_name || '').toLowerCase() === locationFilter.toLowerCase())
-    .sort((a, b) => (b.lastSeenTs || 0) - (a.lastSeenTs || 0));
+  const entries = getFilteredEntries();
 
   if (!entries.length) {
     grid.innerHTML = '';
+    grid.style.gridTemplateColumns = '';
+    grid.style.gridAutoRows = '';
     if (empty) empty.style.display = '';
     return;
   }
   if (empty) empty.style.display = 'none';
   grid.innerHTML = entries.map(e => galleryCard(e)).join('');
+  setTimeout(updateGridLayout, 0);
 
   if (flashName) {
     const key = _speciesKey(flashName);
@@ -553,6 +567,74 @@ async function previewSound(key, index) {
   audio.onended = () => URL.revokeObjectURL(url);
 }
 
+// ── Layout: fill viewport ────────────────────────────────────────────────────
+
+function _resizeMain() {
+  const main      = document.getElementById('main');
+  const header    = document.getElementById('header');
+  const footer    = document.getElementById('attribution-footer');
+  const explainer = document.getElementById('explainer-tile');
+  if (!main || !header) return;
+
+  const footerH    = (footer && !document.body.classList.contains('footer-hidden'))
+    ? footer.offsetHeight : 0;
+  const isDesktop  = window.innerWidth > 600 && window.innerHeight > 500;
+  const explainerH = isDesktop ? (explainer?.offsetHeight || 0) : 0;
+  const h = window.innerHeight - header.offsetHeight - footerH - explainerH;
+  main.style.height = Math.max(180, h) + 'px';
+}
+
+function updateGridLayout() {
+  // Mobile landscape uses a different overlay layout — skip dynamic sizing
+  if (window.innerHeight < 500 && window.matchMedia('(orientation: landscape)').matches) {
+    const g = document.getElementById('gallery-grid');
+    if (g) { g.style.gridTemplateColumns = ''; g.style.gridAutoRows = ''; }
+    return;
+  }
+
+  const grid = document.getElementById('gallery-grid');
+  const main = document.getElementById('main');
+  if (!grid || !main) return;
+
+  const count = getFilteredEntries().length;
+  if (!count) return;
+
+  const style  = getComputedStyle(main);
+  const padH   = parseFloat(style.paddingLeft)  + parseFloat(style.paddingRight);
+  const padV   = parseFloat(style.paddingTop)   + parseFloat(style.paddingBottom);
+  const GAP    = 16;
+  const availW = Math.max(100, main.clientWidth  - padH);
+  const availH = Math.max(100, main.clientHeight - padV);
+
+  // Find column count that gives cards closest to target aspect ratio
+  let bestCols = Math.min(count, 4);
+  let bestScore = Infinity;
+  for (let cols = 1; cols <= Math.min(count, 5); cols++) {
+    const rows  = Math.ceil(count / cols);
+    const cardW = (availW - GAP * (cols - 1)) / cols;
+    const cardH = (availH - GAP * (rows - 1)) / rows;
+    if (cardH < 130) continue;
+    const score = Math.abs(Math.log((cardW / cardH) / 1.15));
+    if (score < bestScore) { bestScore = score; bestCols = cols; }
+  }
+
+  const rows = Math.ceil(count / bestCols);
+  const rowH = Math.max(130, Math.floor((availH - GAP * (rows - 1)) / rows));
+  grid.style.gridTemplateColumns = `repeat(${bestCols}, 1fr)`;
+  grid.style.gridAutoRows        = rowH + 'px';
+}
+
+// ── Footer hide/show ─────────────────────────────────────────────────────────
+
+function toggleFooter() {
+  document.body.classList.toggle('footer-hidden');
+  try {
+    localStorage.setItem('base-footer-hidden', document.body.classList.contains('footer-hidden') ? '1' : '0');
+  } catch { /* storage unavailable */ }
+  _resizeMain();
+  updateGridLayout();
+}
+
 // ── Explainer modal (mobile) ─────────────────────────────────────────────────
 
 function toggleExplainer() {
@@ -607,6 +689,16 @@ async function init() {
 
   const yearEl = document.getElementById('footer-year');
   if (yearEl) yearEl.textContent = new Date().getFullYear();
+
+  // Restore footer hidden state
+  try {
+    if (localStorage.getItem('base-footer-hidden') === '1') {
+      document.body.classList.add('footer-hidden');
+    }
+  } catch { /* storage unavailable */ }
+
+  _resizeMain();
+  window.addEventListener('resize', () => { _resizeMain(); updateGridLayout(); });
 
   loadGalleryFromStorage();
   renderGallery();

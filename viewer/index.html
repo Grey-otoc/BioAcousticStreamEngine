@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BASE Viewer</title>
+  <title>BASE Viewer by Blenheim Palace Innovation</title>
   <link rel="stylesheet" href="viewer.css">
 </head>
 <body>
@@ -14,8 +14,8 @@
     </div>
     <div id="live-badge">
       <span id="live-pill">LIVE</span>
+      <span id="live-site-text"></span>
       <span id="live-loc-text">Monitoring</span>
-      <span id="live-mic-locs"></span>
     </div>
     <div id="header-right">
       <button id="sound-unlock-btn" class="btn btn-sm btn-outline sound-on" onclick="toggleSound()" title="Toggle live soundscape">
@@ -32,8 +32,18 @@
   <main id="main">
     <div id="gallery-grid"></div>
     <div id="empty-state">
-      <div class="empty-icon">◈</div>
-      <p>No detections yet</p>
+      <div class="listen-anim">
+        <div class="listen-bar"></div>
+        <div class="listen-bar"></div>
+        <div class="listen-bar"></div>
+        <div class="listen-bar"></div>
+        <div class="listen-bar"></div>
+        <div class="listen-bar"></div>
+        <div class="listen-bar"></div>
+        <div class="listen-bar"></div>
+        <div class="listen-bar"></div>
+      </div>
+      <p class="listen-label">Listening…</p>
       <p class="hint">Open <strong>⚙ Settings</strong> to configure your MQTT feed</p>
     </div>
   </main>
@@ -48,7 +58,7 @@
     <form id="settings-form" onsubmit="applySettings(event)">
       <div class="form-group">
         <label>Broker WebSocket URL</label>
-        <input type="text" id="s-url" placeholder="wss://u1d78101.ala.eu-central-1.emqxsl.com:8084/mqtt" spellcheck="false" oninput="checkBrokerUrl()">
+        <input type="text" id="s-url" placeholder="wss://...8084/mqtt" spellcheck="false" oninput="checkBrokerUrl()">
         <small>EMQX WebSocket: <strong>wss://u1d78101.ala.eu-central-1.emqxsl.com:8084/mqtt</strong><br>Port 8883 is TCP-only and won't work in a browser.</small>
         <div id="url-warn" style="display:none;margin-top:6px;padding:7px 10px;background:rgba(210,153,34,0.15);border:1px solid var(--warning);border-radius:var(--radius);font-size:0.75rem;color:var(--warning);line-height:1.5"></div>
       </div>
@@ -150,7 +160,9 @@
     <span>BioAcoustic Stream Engine (BASE)</span>
     <span class="footer-divider">·</span>
     <span>Blenheim Palace Innovation Team <span id="footer-year"></span></span>
+    <button id="footer-hide-btn" onclick="toggleFooter()" title="Hide footer">✕</button>
   </footer>
+  <button id="footer-show-btn" onclick="toggleFooter()" title="Show footer">▲</button>
 
   <!-- Explainer overlay (mobile) -->
   <div id="explainer-overlay" onclick="toggleExplainer()"></div>
@@ -177,7 +189,7 @@
       </div>
       <div class="explainer-section explainer-why">
         <span class="explainer-dot">●</span>
-        <div><strong>Why it matters</strong>Biodiversity underpins every living ecosystem — from clean water and fertile soil to a stable climate. Knowing which species are present, and tracking how populations change over time, gives conservation teams the evidence they need to protect habitats before it is too late. BASE turns sound into actionable data, continuously and at scale.</div>
+        <div><strong>Why it matters</strong>Biodiversity underpins every living ecosystem. Knowing which species are present, and tracking how populations change over time, gives conservation teams the evidence they need to protect habitats.</div>
       </div>
     </div>
   </div>

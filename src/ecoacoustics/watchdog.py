@@ -62,14 +62,14 @@ class Watchdog(threading.Thread):
 
     def __init__(
         self,
-        captures: "dict[int, AudioCapture]",
+        captures: "dict[tuple, AudioCapture]",
         clip_manager: "ClipManager",
         stop_event: threading.Event,
         clips_dir: str = "output/clips",
     ):
         """
         Args:
-            captures: Dict mapping sample_rate → AudioCapture, same as in Pipeline.
+            captures: Dict mapping (sample_rate, device) → AudioCapture, same as in Pipeline.
             clip_manager: The active ClipManager instance (for emergency cleanup).
             stop_event: Threading event shared with the Pipeline; set to stop the loop.
             clips_dir: Path to the clips directory (used for disk-space checks).
@@ -81,7 +81,7 @@ class Watchdog(threading.Thread):
         self._clips_dir = Path(clips_dir)
 
         # Baseline dropped-chunk counts per stream for delta reporting
-        self._last_dropped: dict[int, int] = {sr: 0 for sr in captures}
+        self._last_dropped: dict = {k: 0 for k in captures}
         self._last_status_time = time.time()
 
     # ------------------------------------------------------------------
@@ -103,32 +103,50 @@ class Watchdog(threading.Thread):
     # Health checks
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _stream_label(key) -> str:
+        """Human-readable label for a capture key, e.g. '48000Hz/built-in'."""
+        if isinstance(key, tuple) and len(key) >= 2:
+            sr, dev = key[0], key[1]
+            dev_str = str(dev)
+            if "usb-" in dev_str:
+                short = "usb-mic"
+            elif "pci-" in dev_str or "analog" in dev_str:
+                short = "built-in"
+            elif dev_str in ("pulse", "pipewire", "default", "None", "none"):
+                short = "default"
+            else:
+                short = dev_str.split(".")[-1][:16]
+            return f"{sr}Hz/{short}"
+        return f"{key}Hz"
+
     def _check_queues(self) -> None:
         """Warn if any audio queue is filling up or dropping chunks."""
-        for sr, capture in self._captures.items():
+        for key, capture in self._captures.items():
+            label = self._stream_label(key)
             depth = capture.queue_depth
             cap = capture.queue_capacity
             pct = depth / cap if cap else 0
 
             if pct >= 0.9:
                 _console.print(
-                    f"[bold red][watchdog] {sr}Hz queue critical "
+                    f"[bold red][watchdog] {label} queue critical "
                     f"({depth}/{cap}) — processing can't keep up[/bold red]"
                 )
             elif pct >= 0.6:
                 _console.print(
-                    f"[yellow][watchdog] {sr}Hz queue filling "
+                    f"[yellow][watchdog] {label} queue filling "
                     f"({depth}/{cap} slots used)[/yellow]"
                 )
 
             new_dropped = capture.dropped_chunks
-            delta = new_dropped - self._last_dropped.get(sr, 0)
+            delta = new_dropped - self._last_dropped.get(key, 0)
             if delta > 0:
                 _console.print(
-                    f"[yellow][watchdog] {sr}Hz stream dropped {delta} chunk(s) "
+                    f"[yellow][watchdog] {label} dropped {delta} chunk(s) "
                     f"(total {new_dropped}) — classifier is slower than real-time[/yellow]"
                 )
-            self._last_dropped[sr] = new_dropped
+            self._last_dropped[key] = new_dropped
 
     def _check_streams(self) -> None:
         """Restart any audio stream that has gone stale or is delivering silence.
@@ -141,7 +159,8 @@ class Watchdog(threading.Thread):
            rather than terminating it.
         """
         now = time.time()
-        for sr, capture in self._captures.items():
+        for key, capture in self._captures.items():
+            label = self._stream_label(key)
             last = capture.last_chunk_time
             reference = last if last > 0.0 else capture.started_at
             if reference == 0.0:
@@ -171,14 +190,14 @@ class Watchdog(threading.Thread):
 
             if needs_restart:
                 _console.print(
-                    f"[yellow][watchdog] {sr}Hz stream stale ({reason}) "
+                    f"[yellow][watchdog] {label} stale ({reason}) "
                     f"— attempting restart[/yellow]"
                 )
                 try:
                     capture.restart()
-                    _console.print(f"[green][watchdog] {sr}Hz stream restarted successfully[/green]")
+                    _console.print(f"[green][watchdog] {label} restarted successfully[/green]")
                 except Exception as exc:
-                    _console.print(f"[red][watchdog] {sr}Hz restart failed: {exc}[/red]")
+                    _console.print(f"[red][watchdog] {label} restart failed: {exc}[/red]")
 
     def _check_disk(self) -> None:
         """Warn on low disk space; trigger emergency cleanup if critical."""
@@ -208,8 +227,9 @@ class Watchdog(threading.Thread):
         self._last_status_time = now
 
         parts = []
-        for sr, capture in self._captures.items():
-            parts.append(f"{sr}Hz q={capture.queue_depth}/{capture.queue_capacity}")
+        for key, capture in self._captures.items():
+            label = self._stream_label(key)
+            parts.append(f"{label} q={capture.queue_depth}/{capture.queue_capacity}")
         if self._clips_dir.exists():
             try:
                 free_mb = shutil.disk_usage(self._clips_dir).free // (1024 ** 2)

@@ -80,6 +80,19 @@ body {
   display: inline;
   animation: blink 2s ease-in-out infinite;
 }
+#live-site-text {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+#live-site-text:not(:empty) + #live-loc-text::before {
+  content: '·';
+  margin: 0 7px;
+  color: var(--border);
+  font-weight: 400;
+}
 #live-loc-text {
   font-size: 0.88rem;
   font-weight: 700;
@@ -150,6 +163,41 @@ body {
   text-align: center;
 }
 .footer-divider { opacity: 0.5; }
+
+#footer-hide-btn {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+#footer-hide-btn:hover { color: rgba(255,255,255,0.9); }
+
+#footer-show-btn {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  right: 16px;
+  z-index: 101;
+  background: var(--brand);
+  border: none;
+  border-radius: 4px 4px 0 0;
+  color: rgba(255,255,255,0.6);
+  font-size: 0.65rem;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+#footer-show-btn:hover { color: #fff; }
+body.footer-hidden #attribution-footer { display: none; }
+body.footer-hidden #footer-show-btn    { display: block; }
+body.footer-hidden #explainer-tile     { bottom: 0; }
 
 /* ── Explainer tile ── */
 
@@ -233,7 +281,6 @@ body {
 
   /* Overlay card-info on bottom of image — image-dominant layout */
   .gallery-card { position: relative; }
-  .card-img-wrap { aspect-ratio: 4 / 3; }
   .card-info {
     position: absolute;
     bottom: 0; left: 0; right: 0;
@@ -275,20 +322,27 @@ body {
 
 /* ── Gallery grid ── */
 
-#main { padding: 20px; padding-bottom: 130px; }
+#main {
+  padding: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 
 #gallery-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 20px;
+  flex: 1;
+  min-height: 0;
+  gap: 16px;
+  align-content: stretch;
 }
 
 @media (max-width: 800px) {
-  #gallery-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; }
-  #main { padding: 12px; padding-bottom: 52px; }
+  #gallery-grid { gap: 12px; }
+  #main { padding: 12px; }
 }
 @media (max-width: 520px) {
-  #gallery-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  #gallery-grid { gap: 10px; }
   #main { padding: 10px; }
   #conn-label { display: none; }
   #header { padding: 8px 12px; }
@@ -299,14 +353,49 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 65vh;
+  height: 100%;
   text-align: center;
   color: var(--muted);
-  gap: 8px;
+  gap: 20px;
 }
-.empty-icon  { font-size: 3rem; opacity: 0.3; }
-#empty-state p { font-size: 0.95rem; }
 #empty-state .hint { font-size: 0.82rem; }
+
+/* ── Animated listening waveform ── */
+.listen-anim {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 130px;
+}
+.listen-bar {
+  width: 9px;
+  border-radius: 5px;
+  background: var(--primary);
+  animation: listenPulse 1.5s ease-in-out infinite;
+  transform-origin: center;
+  opacity: 0.65;
+}
+.listen-bar:nth-child(1) { height: 26px;  animation-delay: 0s;    }
+.listen-bar:nth-child(2) { height: 44px;  animation-delay: 0.12s; }
+.listen-bar:nth-child(3) { height: 68px;  animation-delay: 0.24s; }
+.listen-bar:nth-child(4) { height: 92px;  animation-delay: 0.36s; }
+.listen-bar:nth-child(5) { height: 110px; animation-delay: 0.48s; }
+.listen-bar:nth-child(6) { height: 92px;  animation-delay: 0.60s; }
+.listen-bar:nth-child(7) { height: 68px;  animation-delay: 0.72s; }
+.listen-bar:nth-child(8) { height: 44px;  animation-delay: 0.84s; }
+.listen-bar:nth-child(9) { height: 26px;  animation-delay: 0.96s; }
+@keyframes listenPulse {
+  0%, 100% { transform: scaleY(0.22); opacity: 0.25; }
+  50%       { transform: scaleY(1.0);  opacity: 0.85; }
+}
+.listen-label {
+  font-size: 1.05rem;
+  font-weight: 300;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 
 /* ── Gallery cards ── */
 
@@ -318,6 +407,9 @@ body {
   cursor: pointer;
   transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
   animation: cardIn 0.35s ease both;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .gallery-card:hover {
   transform: translateY(-3px);
@@ -340,7 +432,8 @@ body {
 /* Card image */
 .card-img-wrap {
   position: relative;
-  aspect-ratio: 4 / 3;
+  flex: 1;
+  min-height: 60px;
   overflow: hidden;
   background: var(--surface2);
 }
