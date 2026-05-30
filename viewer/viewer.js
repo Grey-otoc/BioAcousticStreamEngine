@@ -201,10 +201,11 @@ function disconnect() {
   _setMicLocs([]);
 }
 
+const micLocNames = [];   // names from /locations retained message
+
 function _setMicLocs(locs) {
-  const el = document.getElementById('live-mic-locs');
-  if (!el) return;
-  el.textContent = locs.map(m => m.name).filter(Boolean).join(' · ');
+  micLocNames.length = 0;
+  locs.forEach(m => { if (m.name) micLocNames.push(m.name); });
 }
 
 function setConnStatus(state, label) {
@@ -282,8 +283,11 @@ function renderGallery(flashName) {
 function galleryCard(entry) {
   const { det, key, count, bestConf, firstSeen, lastSeen } = entry;
   const pct = Math.round(bestConf * 100);
-  const locParts = [det.location_name, det.mic_name].filter(Boolean);
-  const locDisplay = locParts.join(' · ');
+  // Combine site name with monitoring location. Use mic_name from the detection
+  // payload if present (requires pipeline restart); otherwise fall back to the
+  // mic names received from the /locations retained MQTT message.
+  const micLabel = det.mic_name || micLocNames.join(' · ');
+  const locDisplay = [det.location_name, micLabel].filter(Boolean).join(' · ');
 
   return `
     <div class="gallery-card" id="card-${key}" onclick="showSpeciesDetail('${det.species_common.replace(/'/g, "\\'")}')">
