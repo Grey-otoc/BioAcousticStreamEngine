@@ -206,6 +206,7 @@ const micLocNames = [];   // names from /locations retained message
 function _setMicLocs(locs) {
   micLocNames.length = 0;
   locs.forEach(m => { if (m.name) micLocNames.push(m.name); });
+  renderGallery();
 }
 
 function setConnStatus(state, label) {
