@@ -659,6 +659,16 @@ async function init() {
   await preloadImageCache();
   await loadImageManifest();
 
+  // Fetch classifier → monitoring location mapping from the API.
+  // Works when the viewer is served via the BASE dashboard (/viewer/).
+  try {
+    const resp = await fetch('/api/settings/classifier_locations');
+    if (resp.ok) {
+      const map = await resp.json();
+      Object.assign(classifierLocMap, map);
+    }
+  } catch { /* viewer served standalone — will use /locations MQTT message instead */ }
+
   // URL params override stored settings — useful for kiosk/Yodeck deployments
   // where you can't interact with the settings panel.
   // e.g. ?broker=wss://host:8084/mqtt&username=base&password=secret&prefix=bioacoustics

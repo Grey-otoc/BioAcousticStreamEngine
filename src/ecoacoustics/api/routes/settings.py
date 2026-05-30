@@ -226,6 +226,26 @@ def delete_mic(index: int):
     return {"updated": True, "mics": mics}
 
 
+@router.get("/settings/classifier_locations")
+def get_classifier_locations():
+    """Return the classifier → monitoring location name mapping used by the viewer."""
+    with open(_SETTINGS) as f:
+        cfg = yaml.safe_load(f)
+    return cfg.get("classifiers", {}).get("locations", {})
+
+
+@router.post("/settings/classifier_locations")
+def set_classifier_locations(body: dict):
+    with open(_SETTINGS) as f:
+        cfg = yaml.safe_load(f)
+    if "classifiers" not in cfg:
+        cfg["classifiers"] = {}
+    cfg["classifiers"]["locations"] = body
+    with open(_SETTINGS, "w") as f:
+        yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+    return {"updated": True}
+
+
 @router.get("/settings/classifiers")
 def get_classifiers():
     with open(_SETTINGS) as f:
