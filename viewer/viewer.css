@@ -251,7 +251,6 @@ body.explainer-hidden #explainer-btn   { display: flex; }
   #gallery-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
 
   /* Overlay card-info on bottom of image — image-dominant layout */
-  .gallery-card { position: relative; }
   .card-info {
     position: absolute;
     bottom: 0; left: 0; right: 0;
@@ -294,17 +293,12 @@ body.explainer-hidden #explainer-btn   { display: flex; }
 
 #main {
   padding: 16px;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  overflow-y: auto;
 }
 
 #gallery-grid {
   display: grid;
-  flex: 1;
-  min-height: 0;
   gap: 16px;
-  align-content: stretch;
 }
 
 @media (max-width: 800px) {
@@ -402,8 +396,7 @@ body.explainer-hidden #explainer-btn   { display: flex; }
 /* Card image */
 .card-img-wrap {
   position: relative;
-  flex: 1;
-  min-height: 60px;
+  aspect-ratio: 4 / 3;
   overflow: hidden;
   background: var(--surface2);
 }

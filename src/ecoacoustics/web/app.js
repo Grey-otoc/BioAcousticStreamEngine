@@ -299,11 +299,29 @@ async function refreshDevicePanel() {
   const panel = document.getElementById('device-panel');
   if (!panel) return;
   try {
-    const [devData, statusData, micsData] = await Promise.all([
+    const [devData, statusData, micsData, schedData] = await Promise.all([
       api.get('/api/devices'),
       state.status ? Promise.resolve(state.status) : api.get('/api/status'),
       api.get('/api/settings/mics').catch(() => []),
+      api.get('/api/schedule').catch(() => ({ windows: [] })),
     ]);
+
+    const schedWindows = schedData.windows || [];
+    const activeWin = schedWindows.find(w => w.active) || null;
+    const nextWin = (() => {
+      if (activeWin) return null;
+      const now = new Date();
+      const nowMins = now.getHours() * 60 + now.getMinutes();
+      return schedWindows
+        .map(w => { const [h, m] = w.start.split(':').map(Number); return { ...w, startMins: h * 60 + m }; })
+        .filter(w => w.startMins > nowMins)
+        .sort((a, b) => a.startMins - b.startMins)[0] || null;
+    })();
+    const schedTag = activeWin
+      ? `<span class="sched-tag sched-active">${activeWin.name.replace(/_/g, ' ')}</span>`
+      : nextWin
+        ? `<span class="sched-tag sched-next">next: ${nextWin.name.replace(/_/g, ' ')} ${nextWin.start}</span>`
+        : '';
     const pipelines = statusData.pipelines || {};
     const deviceLocs = _loadDeviceLocs();
 
@@ -332,7 +350,7 @@ async function refreshDevicePanel() {
       return `
         <div class="device-row ${isRunning ? 'running' : ''}">
           <div class="device-info">
-            <div class="device-name">${d.is_default ? '★ ' : ''}${d.label || d.name}</div>
+            <div class="device-name">${d.is_default ? '★ ' : ''}${d.label || d.name}${schedTag}</div>
             <div class="device-meta">${d.channels}ch · ${hz}kHz${stateTag ? ' · ' : ''}${stateTag}</div>
           </div>
           ${locSelector}

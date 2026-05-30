@@ -337,7 +337,10 @@ tr:hover td { background: var(--surface2); }
 }
 .device-row.running { border-color: var(--primary); }
 .device-info { flex: 1; min-width: 160px; }
-.device-name { font-weight: 600; font-size: 0.88rem; }
+.device-name { font-weight: 600; font-size: 0.88rem; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sched-tag { font-size: 0.68rem; font-weight: 600; padding: 2px 7px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.04em; }
+.sched-active { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); border: 1px solid color-mix(in srgb, var(--success) 40%, transparent); }
+.sched-next { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent); }
 .device-meta { font-size: 0.73rem; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
 .device-status { font-size: 0.75rem; font-weight: 600; }
 .device-status.running { color: var(--primary); }
