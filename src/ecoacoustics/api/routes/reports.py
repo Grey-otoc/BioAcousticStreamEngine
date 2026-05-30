@@ -156,12 +156,15 @@ def download_detections(
 
     from ecoacoustics.output.logger import _DETECTION_FIELDS
     output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=_DETECTION_FIELDS, extrasaction="ignore")
-    writer.writeheader()
+    writer = None
 
     if det_path.exists():
         with open(det_path) as f:
             reader = csv.DictReader(f)
+            # Use actual file fieldnames so no column is ever dropped
+            fields = reader.fieldnames or _DETECTION_FIELDS
+            writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+            writer.writeheader()
             for row in reader:
                 d = row.get("date", "")
                 if date_from and d < date_from:
@@ -175,6 +178,11 @@ def download_detections(
                 if location and row.get("location_name", "") != location:
                     continue
                 writer.writerow(row)
+
+    if writer is None:
+        # File absent — write header from canonical field list
+        writer = csv.DictWriter(output, fieldnames=_DETECTION_FIELDS)
+        writer.writeheader()
 
     output.seek(0)
     safe_species = f"_{species.replace(' ', '_')}" if species else ""
@@ -199,12 +207,14 @@ def download_sessions(
 
     from ecoacoustics.output.logger import _SESSION_FIELDS
     output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=_SESSION_FIELDS, extrasaction="ignore")
-    writer.writeheader()
+    writer = None
 
     if sess_path.exists():
         with open(sess_path) as f:
             reader = csv.DictReader(f)
+            fields = reader.fieldnames or _SESSION_FIELDS
+            writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+            writer.writeheader()
             for row in reader:
                 d = row.get("date", "")
                 if date_from and d < date_from:
@@ -216,6 +226,10 @@ def download_sessions(
                 if location and row.get("location_name", "") != location:
                     continue
                 writer.writerow(row)
+
+    if writer is None:
+        writer = csv.DictWriter(output, fieldnames=_SESSION_FIELDS)
+        writer.writeheader()
 
     output.seek(0)
     safe_species = f"_{species.replace(' ', '_')}" if species else ""

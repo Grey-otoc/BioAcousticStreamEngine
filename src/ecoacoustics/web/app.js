@@ -1116,17 +1116,6 @@ async function renderReports() {
     </div>
 
     <div class="card">
-      <div class="card-title">Download</div>
-      <div class="download-row">
-        <button class="btn btn-outline" id="btn-dl-detections">⬇ Detections CSV</button>
-        <button class="btn btn-outline" id="btn-dl-sessions">⬇ Sessions CSV</button>
-      </div>
-      <p style="font-size:0.75rem;color:var(--muted);margin-top:10px">
-        Downloads respect the date range, species, and location filters selected above.
-      </p>
-    </div>
-
-    <div class="card">
       <div class="card-title">Activity Heatmaps ${helpBtn('heatmap')}</div>
       <div id="heatmap-section"><div class="heatmap-empty">Load a report above to generate heatmaps.</div></div>
     </div>
@@ -1134,11 +1123,11 @@ async function renderReports() {
     <div class="card">
       <div class="card-title">Download</div>
       <div class="download-row">
-        <button class="btn btn-outline" id="btn-dl-detections2">⬇ Detections CSV</button>
-        <button class="btn btn-outline" id="btn-dl-sessions2">⬇ Sessions CSV</button>
+        <button class="btn btn-outline" id="btn-dl-detections">⬇ Detections CSV</button>
+        <button class="btn btn-outline" id="btn-dl-sessions">⬇ Sessions CSV</button>
       </div>
       <p style="font-size:0.75rem;color:var(--muted);margin-top:10px">
-        Downloads respect the date range, species, and location filters selected above.
+        All fields included. Respects date range, type, species, and location filters.
       </p>
     </div>
 
@@ -1154,8 +1143,6 @@ async function renderReports() {
   document.getElementById('btn-load-report').addEventListener('click', loadReport);
   document.getElementById('btn-dl-detections').addEventListener('click', () => downloadReport('detections'));
   document.getElementById('btn-dl-sessions').addEventListener('click', () => downloadReport('sessions'));
-  document.getElementById('btn-dl-detections2').addEventListener('click', () => downloadReport('detections'));
-  document.getElementById('btn-dl-sessions2').addEventListener('click', () => downloadReport('sessions'));
   document.getElementById('btn-clear-logs').addEventListener('click', confirmClearLogs);
   document.getElementById('r-type').addEventListener('change', refreshReportSpecies);
 
@@ -1312,7 +1299,12 @@ function downloadReport(type) {
   if (species) url += `&species=${encodeURIComponent(species)}`;
   if (location) url += `&location=${encodeURIComponent(location)}`;
   const a = document.createElement('a');
-  a.href = url; a.download = ''; a.click();
+  a.href = url;
+  a.download = '';
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 async function confirmClearLogs() {
