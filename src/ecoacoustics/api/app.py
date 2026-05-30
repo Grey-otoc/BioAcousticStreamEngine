@@ -16,6 +16,22 @@ from pathlib import Path
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from starlette.types import Scope, Receive, Send
+
+
+class NoCacheStaticFiles(StaticFiles):
+    """StaticFiles that tells browsers to always revalidate — prevents stale JS/CSS."""
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = dict(message.get("headers", []))
+                headers[b"cache-control"] = b"no-cache, must-revalidate"
+                message = {**message, "headers": list(headers.items())}
+            await send(message)
+
+        await super().__call__(scope, receive, send_with_headers)
 
 from ecoacoustics.api import state
 from ecoacoustics.api.pipeline_manager import PipelineManager
@@ -80,7 +96,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 # ── Static files — mounted last so it only catches unmatched requests ──
 _web_dir = Path(__file__).parent.parent / "web"
-app.mount("/", StaticFiles(directory=str(_web_dir), html=True), name="web")
+app.mount("/", NoCacheStaticFiles(directory=str(_web_dir), html=True), name="web")
 
 
 async def _broadcast_loop() -> None:
