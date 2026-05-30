@@ -181,8 +181,12 @@ function connect() {
   mqttClient.on('message', (_topic, payload) => {
     try {
       const data = JSON.parse(payload.toString());
-      if (Array.isArray(data)) {
-        _setMicLocs(data);
+      if (data.classifier_locations !== undefined) {
+        // New /locations format: {mics:[…], classifier_locations:{bird:"Garden",…}}
+        Object.assign(classifierLocMap, data.classifier_locations || {});
+        renderGallery();
+      } else if (Array.isArray(data)) {
+        // Legacy /locations format: bare array of mics — no classifier mapping
       } else if (data.species_common) {
         updateGallery(data);
       }
@@ -198,16 +202,9 @@ function connect() {
 function disconnect() {
   if (mqttClient) { mqttClient.end(true); mqttClient = null; }
   setConnStatus('disconnected', 'Disconnected');
-  _setMicLocs([]);
 }
 
-const micLocNames = [];   // names from /locations retained message
-
-function _setMicLocs(locs) {
-  micLocNames.length = 0;
-  locs.forEach(m => { if (m.name) micLocNames.push(m.name); });
-  renderGallery();
-}
+const classifierLocMap = {};  // classifier → monitoring location name (from /locations)
 
 function setConnStatus(state, label) {
   const dot   = document.getElementById('conn-dot');
@@ -284,10 +281,7 @@ function renderGallery(flashName) {
 function galleryCard(entry) {
   const { det, key, count, bestConf, firstSeen, lastSeen } = entry;
   const pct = Math.round(bestConf * 100);
-  // Combine site name with monitoring location. Use mic_name from the detection
-  // payload if present (requires pipeline restart); otherwise fall back to the
-  // mic names received from the /locations retained MQTT message.
-  const micLabel = det.mic_name || micLocNames.join(' · ');
+  const micLabel = det.mic_name || classifierLocMap[det.classifier] || '';
   const locDisplay = [det.location_name, micLabel].filter(Boolean).join(' · ');
 
   return `

@@ -67,12 +67,14 @@ class MqttPublisher:
         longitude: float | None = None,
         location_name: str | None = None,
         mics: list | None = None,
+        classifier_locations: dict | None = None,
     ):
         self._prefix = topic_prefix.rstrip("/")
         self._lat = latitude
         self._lon = longitude
         self._location_name = location_name or ""
         self._mics = mics or []
+        self._classifier_locations = classifier_locations or {}
 
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._client.on_connect = self._on_connect
@@ -90,14 +92,11 @@ class MqttPublisher:
             _log.warning("MQTT: could not connect to %s:%d — %s", host, port, exc)
 
     def publish_locations(self) -> None:
-        """Publish the mic location array to {prefix}/locations (retained).
-
-        Uses MQTT retain so any subscriber that connects later immediately
-        receives the current list without waiting for the next detection.
-        """
-        if not self._mics:
-            return
-        payload = json.dumps(self._mics, ensure_ascii=False)
+        """Publish mic locations and classifier→location mapping to {prefix}/locations (retained)."""
+        payload = json.dumps({
+            "mics": self._mics,
+            "classifier_locations": self._classifier_locations,
+        }, ensure_ascii=False)
         self._client.publish(f"{self._prefix}/locations", payload, retain=True)
         _log.info("MQTT: published %d mic location(s)", len(self._mics))
 

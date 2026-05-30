@@ -107,6 +107,7 @@ class Pipeline:
                 longitude=loc_cfg.get("longitude", bird_cfg.get("longitude")),
                 location_name=loc_cfg.get("name", ""),
                 mics=mics_cfg,
+                classifier_locations=self._cfg.get("classifiers", {}).get("locations", {}),
             )
 
         self._logger = DetectionLogger(
