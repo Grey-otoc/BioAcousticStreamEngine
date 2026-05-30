@@ -27,7 +27,6 @@ let mqttClient  = null;
 let db          = null;
 let probabilityThreshold = 0; // 0.0–1.0; set via &probability=N URL param
 let locationFilter = '';      // set via &location=Name URL param
-let siteName = '';            // populated from first MQTT detection's location_name
 const imageVariants = {};     // key → count of available images (from manifest.json)
 
 // ── Settings (localStorage) ──────────────────────────────────────────────────
@@ -239,12 +238,6 @@ function updateGallery(det) {
     e.lastSeenTs = ts;
   }
 
-  if (!siteName && det.location_name) {
-    siteName = det.location_name;
-    const siteEl = document.getElementById('live-site-text');
-    if (siteEl) siteEl.textContent = siteName;
-  }
-
   saveGalleryToStorage();
   renderGallery(name);
   playDetectionSound(key);
@@ -301,10 +294,12 @@ function galleryCard(entry) {
       <div class="card-info">
         <div class="card-name-row">
           <span class="card-name">${det.species_common}</span>
-          ${det.location_name ? `<span class="card-loc-badge">📍 ${det.location_name}</span>` : ''}
         </div>
         <div class="card-sci">${det.species_scientific || ''}</div>
-        <div class="card-clf">${det.classifier || ''}</div>
+        <div class="card-meta-row">
+          ${det.classifier ? `<span class="card-clf">${det.classifier}</span>` : ''}
+          ${det.location_name ? `<span class="card-loc-badge">📍 ${det.location_name}</span>` : ''}
+        </div>
         <div class="card-times">
           <span title="First detected">⬆ ${_fmtSeen(firstSeen?.date, firstSeen?.time)}</span>
           <span title="Last detected">⬇ ${_fmtSeen(lastSeen?.date,  lastSeen?.time)}</span>
@@ -624,20 +619,22 @@ function updateGridLayout() {
   grid.style.gridAutoRows        = rowH + 'px';
 }
 
-// ── Footer hide/show ─────────────────────────────────────────────────────────
 
-function toggleFooter() {
-  document.body.classList.toggle('footer-hidden');
-  try {
-    localStorage.setItem('base-footer-hidden', document.body.classList.contains('footer-hidden') ? '1' : '0');
-  } catch { /* storage unavailable */ }
-  _resizeMain();
-  updateGridLayout();
-}
-
-// ── Explainer modal (mobile) ─────────────────────────────────────────────────
+// ── Explainer modal (mobile) / hide bar (desktop) ────────────────────────────
 
 function toggleExplainer() {
+  // Desktop: toggle the explainer bar hidden/visible
+  if (window.innerWidth > 600 && window.innerHeight > 500) {
+    document.body.classList.toggle('explainer-hidden');
+    try {
+      localStorage.setItem('base-explainer-hidden',
+        document.body.classList.contains('explainer-hidden') ? '1' : '0');
+    } catch { /* storage unavailable */ }
+    _resizeMain();
+    updateGridLayout();
+    return;
+  }
+  // Mobile: open as centred modal
   const tile    = document.getElementById('explainer-tile');
   const overlay = document.getElementById('explainer-overlay');
   const open    = tile.classList.toggle('open');
@@ -690,10 +687,10 @@ async function init() {
   const yearEl = document.getElementById('footer-year');
   if (yearEl) yearEl.textContent = new Date().getFullYear();
 
-  // Restore footer hidden state
+  // Restore explainer hidden state
   try {
-    if (localStorage.getItem('base-footer-hidden') === '1') {
-      document.body.classList.add('footer-hidden');
+    if (localStorage.getItem('base-explainer-hidden') === '1') {
+      document.body.classList.add('explainer-hidden');
     }
   } catch { /* storage unavailable */ }
 

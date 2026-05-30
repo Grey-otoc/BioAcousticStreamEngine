@@ -80,19 +80,6 @@ body {
   display: inline;
   animation: blink 2s ease-in-out infinite;
 }
-#live-site-text {
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--text);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-#live-site-text:not(:empty) + #live-loc-text::before {
-  content: '·';
-  margin: 0 7px;
-  color: var(--border);
-  font-weight: 400;
-}
 #live-loc-text {
   font-size: 0.88rem;
   font-weight: 700;
@@ -164,40 +151,24 @@ body {
 }
 .footer-divider { opacity: 0.5; }
 
-#footer-hide-btn {
-  position: absolute;
-  right: 10px;
+.explainer-close-btn {
   background: none;
   border: none;
-  color: rgba(255,255,255,0.4);
+  color: rgba(255,255,255,0.45);
   font-size: 0.75rem;
   cursor: pointer;
   padding: 2px 6px;
   border-radius: 4px;
   line-height: 1;
+  margin-left: auto;
   transition: color 0.15s;
+  flex-shrink: 0;
 }
-#footer-hide-btn:hover { color: rgba(255,255,255,0.9); }
+.explainer-close-btn:hover { color: rgba(255,255,255,0.95); }
 
-#footer-show-btn {
-  display: none;
-  position: fixed;
-  bottom: 0;
-  right: 16px;
-  z-index: 101;
-  background: var(--brand);
-  border: none;
-  border-radius: 4px 4px 0 0;
-  color: rgba(255,255,255,0.6);
-  font-size: 0.65rem;
-  padding: 3px 10px;
-  cursor: pointer;
-  transition: color 0.15s;
-}
-#footer-show-btn:hover { color: #fff; }
-body.footer-hidden #attribution-footer { display: none; }
-body.footer-hidden #footer-show-btn    { display: block; }
-body.footer-hidden #explainer-tile     { bottom: 0; }
+/* When explainer is hidden, show the ℹ button on desktop and shift tile to bottom: 0 */
+body.explainer-hidden #explainer-tile  { display: none !important; }
+body.explainer-hidden #explainer-btn   { display: flex; }
 
 /* ── Explainer tile ── */
 
@@ -231,7 +202,7 @@ body.footer-hidden #explainer-tile     { bottom: 0; }
   background: var(--brand);
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 8px;
   padding: 10px 20px;
   font-size: 0.68rem;
   font-weight: 700;
@@ -289,8 +260,7 @@ body.footer-hidden #explainer-tile     { bottom: 0; }
     pointer-events: none;
   }
   .card-name     { font-size: 0.72rem; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,0.9); }
-  .card-loc-badge { display: none; }
-  .card-sci, .card-clf, .card-times { display: none; }
+  .card-sci, .card-meta-row, .card-times { display: none; }
 }
 
 /* Mobile: hidden by default, opens as centred modal */
@@ -495,7 +465,14 @@ body.footer-hidden #explainer-tile     { bottom: 0; }
   flex-shrink: 0;
 }
 .card-sci    { font-size: 0.67rem; color: var(--muted); font-style: italic; margin-top: 2px; }
-.card-clf    { font-size: 0.65rem; color: var(--muted); margin-top: 3px; }
+.card-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 3px;
+}
+.card-clf    { font-size: 0.65rem; color: var(--muted); }
 .card-times  {
   display: flex;
   justify-content: space-between;

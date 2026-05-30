@@ -14,7 +14,6 @@
     </div>
     <div id="live-badge">
       <span id="live-pill">LIVE</span>
-      <span id="live-site-text"></span>
       <span id="live-loc-text">Monitoring</span>
     </div>
     <div id="header-right">
@@ -160,16 +159,17 @@
     <span>BioAcoustic Stream Engine (BASE)</span>
     <span class="footer-divider">·</span>
     <span>Blenheim Palace Innovation Team <span id="footer-year"></span></span>
-    <button id="footer-hide-btn" onclick="toggleFooter()" title="Hide footer">✕</button>
   </footer>
-  <button id="footer-show-btn" onclick="toggleFooter()" title="Show footer">▲</button>
 
   <!-- Explainer overlay (mobile) -->
   <div id="explainer-overlay" onclick="toggleExplainer()"></div>
 
   <!-- Explainer tile -->
   <div id="explainer-tile">
-    <div class="explainer-header">How BASE Works</div>
+    <div class="explainer-header">
+      How BASE Works
+      <button class="explainer-close-btn" onclick="toggleExplainer()" title="Hide">✕</button>
+    </div>
     <div class="explainer-body">
       <div class="explainer-section">
         <span class="explainer-dot">●</span>
