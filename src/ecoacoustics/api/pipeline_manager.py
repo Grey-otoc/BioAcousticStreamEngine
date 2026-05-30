@@ -111,16 +111,57 @@ class PipelineManager:
     # Background runners
     # ------------------------------------------------------------------
 
+    def _start_config_watcher(self, pipeline, cfg_snapshot: dict) -> threading.Thread:
+        """Background thread: stop pipeline if classifier/device config changes on disk.
+
+        Fires every 20 s.  If classifiers.active or classifiers.devices differs from
+        the snapshot taken when the pipeline was built, the stop event is set so the
+        pipeline exits cleanly and its owner loop can rebuild with the new config.
+        """
+        active_snap = list(cfg_snapshot.get("classifiers", {}).get("active") or [])
+        devices_snap = dict(cfg_snapshot.get("classifiers", {}).get("devices") or {})
+
+        def _watch():
+            while not pipeline._stop_event.wait(20):
+                try:
+                    with open(self._config_path) as f:
+                        new_cfg = yaml.safe_load(f)
+                    new_clf = new_cfg.get("classifiers", {})
+                    if (list(new_clf.get("active") or []) != active_snap or
+                            dict(new_clf.get("devices") or {}) != devices_snap):
+                        _log.info("Classifier/device config changed — restarting pipeline streams")
+                        pipeline._stop_event.set()
+                        return
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_watch, daemon=True)
+        t.start()
+        return t
+
     def _run_wake(self, duration_seconds: Optional[float]) -> None:
         from ecoacoustics.pipeline import Pipeline
+        _start_time = time.time()
         try:
-            self._pipeline = Pipeline(
-                config_path=self._config_path,
-                detection_callback=self._on_detection,
-                level_callback=self._on_level,
-                device_override=self._device_index,
-            )
-            self._pipeline.run(window_name="manual", duration_seconds=duration_seconds)
+            while self._state == "listening":
+                elapsed = time.time() - _start_time
+                remaining = (duration_seconds - elapsed) if duration_seconds is not None else None
+                if duration_seconds is not None and remaining is not None and remaining <= 0:
+                    break
+                with open(self._config_path) as f:
+                    cfg = yaml.safe_load(f)
+                self._pipeline = Pipeline(
+                    config_path=self._config_path,
+                    detection_callback=self._on_detection,
+                    level_callback=self._on_level,
+                    device_override=self._device_index,
+                )
+                self._start_config_watcher(self._pipeline, cfg)
+                try:
+                    self._pipeline.run(window_name="manual", duration_seconds=remaining)
+                finally:
+                    self._pipeline.close()
+                    self._pipeline = None
         except Exception as exc:
             self._error = str(exc)
             _log.exception("Pipeline (wake) stopped with error: %s", exc)
@@ -164,6 +205,7 @@ class PipelineManager:
                             level_callback=self._on_level,
                             device_override=self._device_index,
                         )
+                        self._start_config_watcher(self._pipeline, cfg)
                         try:
                             session = self._pipeline.run(
                                 window_name=name, duration_seconds=remaining

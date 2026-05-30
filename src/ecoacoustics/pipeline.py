@@ -140,11 +140,18 @@ class Pipeline:
         self._processors: dict[str, AudioProcessor] = {}
 
         clf_devices = self._cfg.get("classifiers", {}).get("devices", {})
-        default_device = device_override if device_override is not None else self._cfg["audio"].get("device")
+        default_device = self._cfg["audio"].get("device")
         max_queue_size = self._cfg["audio"].get("max_queue_size", 20)
 
         for clf in self._classifiers:
-            _device = clf_devices.get(clf.name, default_device)
+            # device_override (set when user manually starts a specific device from the UI)
+            # takes full precedence so that "Start USB Mic" routes ALL classifiers to USB.
+            # Per-classifier assignments in classifiers.devices only apply when running
+            # in scheduled/automated mode (device_override=None).
+            if device_override is not None:
+                _device = device_override
+            else:
+                _device = clf_devices.get(clf.name) or default_device
             _key = (clf.sample_rate, str(_device))
             self._clf_capture_key[clf.name] = _key
             if _key not in self._captures:
