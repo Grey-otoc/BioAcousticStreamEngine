@@ -128,8 +128,9 @@ class AudioCapture:
         self.device = device
         self.channels = channels
 
-        self._queue: queue.Queue[AudioChunk] = queue.Queue(maxsize=max_queue_size)
         self._queue_capacity = max_queue_size
+        self._subscribers: list[queue.Queue[AudioChunk]] = []
+        self._subscriber_lock = threading.Lock()
         self._buffer = np.zeros(0, dtype=np.float32)
         self._stream = None
         self._lock = threading.Lock()
@@ -192,18 +193,18 @@ class AudioCapture:
             except Exception:
                 pass
             self._stream = None
-        drained = 0
-        while not self._queue.empty():
-            try:
-                self._queue.get_nowait()
-                drained += 1
-            except queue.Empty:
-                break
-        if drained:
-            import logging
-            logging.getLogger(__name__).debug(
-                "AudioCapture.stop: drained %d stale chunks from queue", drained
-            )
+        with self._subscriber_lock:
+            subs = list(self._subscribers)
+        total_drained = 0
+        for q in subs:
+            while not q.empty():
+                try:
+                    q.get_nowait()
+                    total_drained += 1
+                except queue.Empty:
+                    break
+        if total_drained:
+            _log.debug("AudioCapture.stop: drained %d stale chunks from queues", total_drained)
         self._started_at = 0.0
 
     def restart(self) -> None:
@@ -219,16 +220,17 @@ class AudioCapture:
         time.sleep(1.0)
         self.start()
 
-    def get_chunk(self, timeout: float = 5.0) -> Optional[AudioChunk]:
-        """Block until a chunk is available or timeout elapses.
+    def subscribe(self, max_queue_size: int = None) -> "queue.Queue[AudioChunk]":
+        """Register a new consumer; returns a dedicated queue fed by every chunk.
 
-        Returns:
-            The next AudioChunk, or None if no chunk arrived within timeout.
+        Each subscriber receives an independent copy of every audio chunk, so
+        multiple classifiers sharing the same physical device each get the full
+        audio stream rather than racing over a single shared queue.
         """
-        try:
-            return self._queue.get(timeout=timeout)
-        except queue.Empty:
-            return None
+        q: queue.Queue[AudioChunk] = queue.Queue(maxsize=max_queue_size or self._queue_capacity)
+        with self._subscriber_lock:
+            self._subscribers.append(q)
+        return q
 
     @staticmethod
     def list_devices() -> None:
@@ -252,8 +254,10 @@ class AudioCapture:
 
     @property
     def queue_depth(self) -> int:
-        """Current number of chunks waiting in the queue."""
-        return self._queue.qsize()
+        """Maximum depth across all subscriber queues."""
+        with self._subscriber_lock:
+            subs = list(self._subscribers)
+        return max((q.qsize() for q in subs), default=0)
 
     @property
     def queue_capacity(self) -> int:
@@ -314,6 +318,7 @@ class AudioCapture:
         if self._last_rms > 1e-6:
             self._last_nonsilent_time = now
 
+        ready_chunks: list[AudioChunk] = []
         with self._lock:
             if len(self._buffer) == 0:
                 # First samples of a new chunk — record the wall time of this moment.
@@ -323,18 +328,25 @@ class AudioCapture:
             while len(self._buffer) >= self.chunk_samples:
                 chunk_data = self._buffer[: self.chunk_samples].copy()
                 self._buffer = self._buffer[self.chunk_samples :]
-                chunk = AudioChunk(
+                ready_chunks.append(AudioChunk(
                     data=chunk_data,
                     sample_rate=self.sample_rate,
                     timestamp=self._chunk_start_time,
-                )
+                ))
                 # Advance start time for any back-to-back chunks extracted in
                 # the same callback (rare, but possible on large frame sizes).
                 self._chunk_start_time += self.chunk_samples / self.sample_rate
-                try:
-                    self._queue.put_nowait(chunk)
-                    self._last_chunk_time = now  # wall clock for watchdog stale check
-                except queue.Full:
-                    # Queue is full — discard rather than blocking the callback,
-                    # which would cause an audio dropout on the input stream.
-                    self._dropped += 1
+
+        # Fan-out each completed chunk to every registered subscriber queue.
+        # This runs outside the buffer lock so a slow put() never stalls the audio thread.
+        if ready_chunks:
+            with self._subscriber_lock:
+                subs = list(self._subscribers)
+            for chunk in ready_chunks:
+                for sub_q in subs:
+                    try:
+                        sub_q.put_nowait(chunk)
+                    except queue.Full:
+                        # Subscriber is too slow — drop rather than blocking the audio thread.
+                        self._dropped += 1
+            self._last_chunk_time = now  # wall clock for watchdog stale check

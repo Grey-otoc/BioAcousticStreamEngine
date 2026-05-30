@@ -18,6 +18,7 @@ Author: David Green, Blenheim Palace
 
 import concurrent.futures
 import math
+import queue
 import signal
 import threading
 import time
@@ -133,10 +134,14 @@ class Pipeline:
         # Keyed by (sample_rate, device) so each classifier can use a different mic
         self._captures: dict[tuple, AudioCapture] = {}
         self._clf_capture_key: dict[str, tuple] = {}
+        # Each classifier gets its own subscriber queue from its capture so that
+        # multiple classifiers sharing one device each receive every audio chunk.
+        self._clf_queues: dict[str, "queue.Queue"] = {}
         self._processors: dict[str, AudioProcessor] = {}
 
         clf_devices = self._cfg.get("classifiers", {}).get("devices", {})
         default_device = device_override if device_override is not None else self._cfg["audio"].get("device")
+        max_queue_size = self._cfg["audio"].get("max_queue_size", 20)
 
         for clf in self._classifiers:
             _device = clf_devices.get(clf.name, default_device)
@@ -148,8 +153,10 @@ class Pipeline:
                     chunk_duration=self._cfg["audio"]["chunk_duration"],
                     device=_device,
                     channels=self._cfg["audio"].get("channels", 1),
-                    max_queue_size=self._cfg["audio"].get("max_queue_size", 20),
+                    max_queue_size=max_queue_size,
                 )
+            # Subscribe this classifier to its capture — receives every chunk independently.
+            self._clf_queues[clf.name] = self._captures[_key].subscribe(max_queue_size=max_queue_size)
             self._processors[clf.name] = AudioProcessor(
                 target_sample_rate=clf.sample_rate,
                 freq_min_hz=clf.freq_min_hz,
@@ -255,7 +262,7 @@ class Pipeline:
             clf: The classifier to run.
             session: The active session for recording detections.
         """
-        capture = self._captures[self._clf_capture_key[clf.name]]
+        clf_queue = self._clf_queues[clf.name]
         processor = self._processors[clf.name]
         consecutive_errors = 0
         cooldown_secs: float = clf.report_cooldown_secs
@@ -281,8 +288,9 @@ class Pipeline:
         )
 
         while not self._stop_event.is_set():
-            chunk = capture.get_chunk(timeout=1.0)
-            if chunk is None:
+            try:
+                chunk = clf_queue.get(timeout=1.0)
+            except queue.Empty:
                 continue
 
             age = time.time() - chunk.timestamp
