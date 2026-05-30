@@ -154,8 +154,10 @@ def download_detections(
     date_from = date_from or ""
     date_to = date_to or "9999-99-99"
 
+    from ecoacoustics.output.logger import _DETECTION_FIELDS
     output = io.StringIO()
-    writer = None
+    writer = csv.DictWriter(output, fieldnames=_DETECTION_FIELDS, extrasaction="ignore")
+    writer.writeheader()
 
     if det_path.exists():
         with open(det_path) as f:
@@ -172,9 +174,6 @@ def download_detections(
                     continue
                 if location and row.get("location_name", "") != location:
                     continue
-                if writer is None:
-                    writer = csv.DictWriter(output, fieldnames=reader.fieldnames)
-                    writer.writeheader()
                 writer.writerow(row)
 
     output.seek(0)
@@ -198,8 +197,10 @@ def download_sessions(
     date_from = date_from or ""
     date_to = date_to or "9999-99-99"
 
+    from ecoacoustics.output.logger import _SESSION_FIELDS
     output = io.StringIO()
-    writer = None
+    writer = csv.DictWriter(output, fieldnames=_SESSION_FIELDS, extrasaction="ignore")
+    writer.writeheader()
 
     if sess_path.exists():
         with open(sess_path) as f:
@@ -214,9 +215,6 @@ def download_sessions(
                     continue
                 if location and row.get("location_name", "") != location:
                     continue
-                if writer is None:
-                    writer = csv.DictWriter(output, fieldnames=reader.fieldnames)
-                    writer.writeheader()
                 writer.writerow(row)
 
     output.seek(0)
