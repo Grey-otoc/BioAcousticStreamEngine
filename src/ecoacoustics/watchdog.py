@@ -83,6 +83,9 @@ class Watchdog(threading.Thread):
         # Baseline dropped-chunk counts per stream for delta reporting
         self._last_dropped: dict = {k: 0 for k in captures}
         self._last_status_time = time.time()
+        # Restart failure tracking: exponential backoff when a device is gone
+        self._restart_failures: dict[tuple, int] = {k: 0 for k in captures}
+        self._next_restart_allowed: dict[tuple, float] = {}
 
     # ------------------------------------------------------------------
     # Thread entry point
@@ -189,6 +192,8 @@ class Watchdog(threading.Thread):
                         reason = f"delivering silence for {silent_for:.0f}s — device may have disconnected"
 
             if needs_restart:
+                if now < self._next_restart_allowed.get(key, 0.0):
+                    continue  # still within backoff window — skip this cycle
                 _console.print(
                     f"[yellow][watchdog] {label} stale ({reason}) "
                     f"— attempting restart[/yellow]"
@@ -196,8 +201,17 @@ class Watchdog(threading.Thread):
                 try:
                     capture.restart()
                     _console.print(f"[green][watchdog] {label} restarted successfully[/green]")
+                    self._restart_failures[key] = 0
+                    self._next_restart_allowed.pop(key, None)
                 except Exception as exc:
-                    _console.print(f"[red][watchdog] {label} restart failed: {exc}[/red]")
+                    n = self._restart_failures.get(key, 0) + 1
+                    self._restart_failures[key] = n
+                    backoff = min(60 * (2 ** (n - 1)), 600)  # 60 → 120 → 240 → 480 → 600s cap
+                    self._next_restart_allowed[key] = now + backoff
+                    _console.print(
+                        f"[red][watchdog] {label} restart failed ({n}×): {exc} "
+                        f"— retrying in {backoff}s[/red]"
+                    )
 
     def _check_disk(self) -> None:
         """Warn on low disk space; trigger emergency cleanup if critical."""

@@ -359,6 +359,31 @@ class AudioCapture:
 
         except Exception as exc:
             _log.warning("AudioCapture: parec reader error: %s", exc)
+        finally:
+            # Device disconnected or process killed — discard any buffered chunks
+            # so the classifiers don't process audio captured before the disconnect.
+            self._drain_queues()
+
+    def _drain_queues(self) -> int:
+        """Discard all buffered chunks from every subscriber queue.
+
+        Called both from stop() and from _parec_reader_loop when the device
+        disconnects, so that stale audio never reaches the classifiers.
+        Returns the number of chunks discarded.
+        """
+        with self._subscriber_lock:
+            subs = list(self._subscribers)
+        total = 0
+        for q in subs:
+            while not q.empty():
+                try:
+                    q.get_nowait()
+                    total += 1
+                except queue.Empty:
+                    break
+        if total:
+            _log.debug("AudioCapture: drained %d stale chunks", total)
+        return total
 
     def stop(self) -> None:
         """Stop the audio stream (sounddevice or parec) and drain queues.
@@ -389,18 +414,7 @@ class AudioCapture:
             self._proc = None
         # _proc_thread is daemon; it exits when parec stdout closes after kill.
 
-        with self._subscriber_lock:
-            subs = list(self._subscribers)
-        total_drained = 0
-        for q in subs:
-            while not q.empty():
-                try:
-                    q.get_nowait()
-                    total_drained += 1
-                except queue.Empty:
-                    break
-        if total_drained:
-            _log.debug("AudioCapture.stop: drained %d stale chunks", total_drained)
+        self._drain_queues()
         self._started_at = 0.0
 
     def restart(self) -> None:

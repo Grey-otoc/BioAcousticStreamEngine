@@ -6,6 +6,7 @@ const DB_NAME    = 'base-viewer';
 const DB_VERSION = 1;
 const MAX_SOUNDS = 5;
 const MAX_SIMULTANEOUS_AUDIO = 3;
+const GALLERY_EXPIRY_MS = 30 * 60 * 1000;  // remove species not seen for 30 min
 
 const PLACEHOLDER = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 60">' +
@@ -328,6 +329,21 @@ function loadGalleryFromStorage() {
       Object.assign(gallery, stored.gallery);
     }
   } catch { /* corrupt data — start fresh */ }
+}
+
+function purgeStaleGallery() {
+  const cutoff = Date.now() - GALLERY_EXPIRY_MS;
+  let changed = false;
+  for (const name of Object.keys(gallery)) {
+    if ((gallery[name].lastSeenTs || 0) < cutoff) {
+      delete gallery[name];
+      changed = true;
+    }
+  }
+  if (changed) {
+    saveGalleryToStorage();
+    renderGallery();
+  }
 }
 
 // ── Audio ─────────────────────────────────────────────────────────────────────
@@ -696,7 +712,9 @@ async function init() {
   window.addEventListener('resize', () => { _resizeMain(); updateGridLayout(); });
 
   loadGalleryFromStorage();
+  purgeStaleGallery();
   renderGallery();
+  setInterval(purgeStaleGallery, 2 * 60 * 1000);  // sweep for expired entries every 2 min
 
   _updateSoundBtn();
 
