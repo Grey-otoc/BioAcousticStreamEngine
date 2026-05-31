@@ -6,7 +6,10 @@ const DB_NAME    = 'base-viewer';
 const DB_VERSION = 1;
 const MAX_SOUNDS = 5;
 const MAX_SIMULTANEOUS_AUDIO = 3;
-const GALLERY_EXPIRY_MS = 30 * 60 * 1000;  // remove species not seen for 30 min
+function _galleryExpiryMs() {
+  const h = Number(loadSettings().galleryRetainHours ?? 24);
+  return h > 0 ? h * 60 * 60 * 1000 : Infinity;  // 0 = unlimited
+}
 
 const PLACEHOLDER = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 60">' +
@@ -34,11 +37,12 @@ const imageVariants = {};     // key → count of available images (from manifes
 
 function defaultSettings() {
   return {
-    brokerUrl:   '',
-    topicPrefix: 'bioacoustics',
-    username:    '',
-    password:    '',
-    autoConnect: false,
+    brokerUrl:          '',
+    topicPrefix:        'bioacoustics',
+    username:           '',
+    password:           '',
+    autoConnect:        false,
+    galleryRetainHours: 24,
   };
 }
 
@@ -349,7 +353,7 @@ function loadGalleryFromStorage() {
 }
 
 function purgeStaleGallery() {
-  const cutoff = Date.now() - GALLERY_EXPIRY_MS;
+  const cutoff = Date.now() - _galleryExpiryMs();
   let changed = false;
   for (const name of Object.keys(gallery)) {
     if ((gallery[name].lastSeenTs || 0) < cutoff) {
@@ -460,6 +464,7 @@ function showSettings() {
   document.getElementById('s-username').value     = s.username || '';
   document.getElementById('s-password').value     = s.password || '';
   document.getElementById('s-autoconnect').checked = !!s.autoConnect;
+  document.getElementById('s-retain').value = String(s.galleryRetainHours ?? 24);
   document.getElementById('settings-overlay').classList.add('open');
   document.getElementById('settings-panel').classList.add('open');
   checkBrokerUrl();
@@ -473,11 +478,12 @@ function hideSettings() {
 function applySettings(e) {
   e.preventDefault();
   saveSettings({
-    brokerUrl:   document.getElementById('s-url').value.trim(),
-    topicPrefix: document.getElementById('s-prefix').value.trim() || 'bioacoustics',
-    username:    document.getElementById('s-username').value,
-    password:    document.getElementById('s-password').value,
-    autoConnect: document.getElementById('s-autoconnect').checked,
+    brokerUrl:          document.getElementById('s-url').value.trim(),
+    topicPrefix:        document.getElementById('s-prefix').value.trim() || 'bioacoustics',
+    username:           document.getElementById('s-username').value,
+    password:           document.getElementById('s-password').value,
+    autoConnect:        document.getElementById('s-autoconnect').checked,
+    galleryRetainHours: Number(document.getElementById('s-retain').value),
   });
   hideSettings();
   connect();
