@@ -10,9 +10,9 @@ This project was born from a belief that technology can bring people closer to t
 
 ## Screenshots
 
-| Dashboard | Schedule |
+| Dashboard | Schedule & Mic Selection |
 |---|---|
-| ![Dashboard — live detection feed and VU meter](docs/screenshots/dashboard.png) | ![Schedule — listening windows and mic assignment](docs/screenshots/schedule.png) |
+| ![Dashboard — live detection feed and VU meter](docs/screenshots/dashboard.png) | ![Schedule — listening windows and mic assignment](docs/screenshots/Schedule%20and%20Mic%20Selection.png) |
 
 | Species Gallery | Image Management |
 |---|---|
@@ -21,6 +21,10 @@ This project was born from a belief that technology can bring people closer to t
 | Clips Library | Reports |
 |---|---|
 | ![Clips — browse and play saved audio clips](docs/screenshots/clips.png) | ![Reports — detection history and CSV export](docs/screenshots/reports.png) |
+
+| BASE Viewer | Recording Spectrogram |
+|---|---|
+| ![BASE Viewer — ambient live species display](docs/screenshots/BASE%20Viewer.png) | ![Recording Spectrogram — live audio frequency display](docs/screenshots/Recording%20Spectogram.png) |
 
 ---
 
@@ -236,6 +240,8 @@ Every MQTT detection payload includes a `species_image` field (e.g. `"european_r
 ---
 
 ## BASE Viewer
+
+![BASE Viewer — ambient live species display](docs/screenshots/BASE%20Viewer.png)
 
 The Viewer is an ambient display page served at `http://localhost:8000/viewer/`. It connects directly to your MQTT broker and shows live species detections as a full-screen photo grid with sounds — designed for kiosk screens, public displays, and remote monitoring rooms.
 
