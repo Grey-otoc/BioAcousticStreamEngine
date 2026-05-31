@@ -28,14 +28,15 @@ This project was born from a belief that technology can bring people closer to t
 
 - **Live microphone streaming** — continuous audio capture with configurable chunk size; multiple concurrent microphones supported, each assigned to a different classifier
 - **BirdNET identification** — powered by [BirdNET-Analyzer](https://github.com/kahst/BirdNET-Analyzer) via [birdnetlib](https://github.com/joeweiss/birdnetlib); identifies 6,000+ species
-- **Bat detection** — powered by [BatDetect2](https://github.com/macaodha/batdetect2); 17 UK/European species; requires an ultrasonic microphone (≥192 kHz)
+- **Bat detection** — powered by [BatDetect2](https://github.com/macaodha/batdetect2); 17 UK/European species; requires an ultrasonic microphone (≥384 kHz)
 - **Scheduled listening** — automatically wakes and sleeps around dawn chorus, morning song, and dusk windows calculated from local sunrise/sunset
 - **Adaptive scheduling** — if nocturnal species (owls, nightjars) are detected, a night window is automatically added
 - **Detailed logging** — every detection logged with date, time, species, scientific name, confidence, and call number within the session
 - **Session summaries** — per-window species totals with max and average confidence
-- **Live MQTT streaming** — every detection published as JSON in real time; direct or bridge connection; configurable via web UI
-- **Browser dashboard** — full web UI for live monitoring, schedule management, audio clips, reports, and settings
+- **Live MQTT streaming** — every detection published as JSON in real time; direct or bridge connection; configurable via web UI; each payload carries full site and monitoring-location coordinates
+- **Browser dashboard** — full web UI for live monitoring, schedule management, audio clips, reports, and settings; per-microphone schedule window and classifier tags
 - **Species gallery** — live photo grid that populates as species are detected; confidence filter, detection counts, CC attribution overlays; replace stock images with your own photographs via the built-in upload tool
+- **BASE Viewer** — a separate ambient display page (`/viewer/`) showing live species detections as a full-screen photo grid with sounds; suitable for kiosks, public screens, and Yodeck deployments; auto-expires entries older than 30 minutes and keeps detections from different sites on separate cards
 - **Extensible architecture** — insect and soil classifiers are structured and ready for model plug-ins
 
 ---
@@ -188,12 +189,13 @@ A browser tab opens automatically at `http://localhost:8000`. A desktop launcher
 
 | Page | Features |
 |---|---|
-| **Dashboard** | Live detection feed, real-time VU meter, per-device start/stop controls, today's species count and call totals |
+| **Dashboard** | Live detection feed, real-time VU meter, per-device start/stop controls, today's species count and call totals; each microphone row shows its active schedule window tag and coloured classifier badges (🐦 Birds, 🦇 Bats, 🐝 Bees, …) |
 | **Gallery** | Live photo grid populated as species are detected; confidence threshold filter; detection counts; CC attribution overlays; upload your own images per species |
 | **Schedule** | Today's listening windows, add/remove custom windows, assign classifiers and microphones per organism group |
 | **Clips** | Browse saved audio clips by species and classifier, play in browser, delete clips |
 | **Reports** | Date and species filtering, daily summary table, download detections/sessions as CSV, clear all logs |
-| **Settings** | Recording location (name, lat/lon), MQTT broker configuration with connection test, classifier device assignment |
+| **Settings** | Recording location (name, lat/lon), monitoring locations (mics list with individual lat/lon), MQTT broker configuration with connection test, classifier device and location assignment |
+| **Viewer** | Ambient full-screen species gallery served at `/viewer/`; connects directly to the MQTT broker; suitable for kiosks and public displays — see [BASE Viewer](#base-viewer) |
 
 ### Web command options
 
@@ -230,6 +232,59 @@ A slider in the gallery header filters cards by minimum confidence score (0–95
 ### MQTT image field
 
 Every MQTT detection payload includes a `species_image` field (e.g. `"european_robin.jpg"`) so downstream systems can display the matching photograph without needing to normalise the species name themselves.
+
+---
+
+## BASE Viewer
+
+The Viewer is an ambient display page served at `http://localhost:8000/viewer/`. It connects directly to your MQTT broker and shows live species detections as a full-screen photo grid with sounds — designed for kiosk screens, public displays, and remote monitoring rooms.
+
+It is also available as a standalone file (`viewer/index.html`) that can be opened directly in a browser without the BASE server.
+
+### What it shows
+
+- **Full-screen gallery** — species cards fill the screen as detections arrive, sorted most-recent first; scrolls automatically when more than ~3 rows are detected
+- **Animated listening state** — when no species have been detected, a pulsing bar animation confirms the system is live and listening
+- **Location per card** — each card shows `Site · Monitoring Location` (e.g. *Charlbury · Garden*); detections from different sites are always kept on separate cards and never merged
+- **Confidence badge** — colour-coded percentage on each card (green ≥70%, amber ≥45%, red below)
+- **Detection count** — `×N` badge shows how many times that species has been detected in the session
+- **First / last seen timestamps** on every card
+
+### Confidence filter
+
+A slider at the top of the gallery sets the minimum confidence for cards to appear. Cards below the threshold are hidden, not deleted.
+
+| URL parameter | Effect |
+|---|---|
+| `probability=0.6` | Pre-set the confidence threshold to 60% on load |
+| `broker=wss://host:8084/mqtt` | Auto-connect to this broker on load |
+| `prefix=bioacoustics` | Set the topic prefix (default: `bioacoustics`) |
+
+Example URL for a kiosk screen (set credentials in the Settings panel on the device, not in the URL):
+
+```
+http://localhost:8000/viewer/?probability=0.65
+```
+
+### Sounds
+
+Upload up to 5 audio recordings per species (MP3, WAV, OGG). Each time that species is detected, one recording is chosen at random and played — building a live ambient soundscape. Up to 3 sounds can play simultaneously.
+
+1. Click any species card → detail panel opens
+2. Under **Sounds**, click **+ Upload** and select audio files
+3. Click **▶** to preview; **✕** to remove
+
+### Photos
+
+Stock images for 108 UK species are bundled. Replace any with your own photograph by clicking the card and uploading a JPEG, PNG, or WebP file. Photos are stored in the browser's IndexedDB and persist across sessions.
+
+### Auto-expiry
+
+Cards automatically disappear after **30 minutes of no new detections** for that species. A background sweep runs every 2 minutes. This keeps the display current — when recording stops, the gallery clears gradually rather than showing stale data indefinitely.
+
+### Explainer panel
+
+A collapsible **How BASE Works** panel explains the system to visitors. Click **✕** to hide it (preference is remembered); click **ℹ** in the header to show it again.
 
 ---
 
@@ -350,14 +405,16 @@ sudo systemctl enable --now mosquitto
 | `bioacoustics/detections` | Every detection, all classifiers |
 | `bioacoustics/detections/bird` | Bird detections only |
 | `bioacoustics/detections/bat` | Bat detections only |
+| `bioacoustics/detections/bee` | Bee detections only |
 | `bioacoustics/detections/insect` | Insect detections only |
 | `bioacoustics/detections/soil` | Soil acoustics detections only |
+| `bioacoustics/locations` | Retained — JSON array of monitoring-location mic positions |
 
 The topic prefix (`bioacoustics`) is configurable in `config/settings.yaml`.
 
-### Payload
+### Detection payload
 
-Each message is a JSON object:
+Each detection message is a JSON object containing full site and monitoring-location coordinates so downstream consumers never need to look up a separate config:
 
 ```json
 {
@@ -368,14 +425,42 @@ Each message is a JSON object:
   "classifier": "bird",
   "species_common": "Robin",
   "species_scientific": "Erithacus rubecula",
+  "species_image": "robin.jpg",
   "confidence": 0.8731,
   "call_number_in_session": 3,
-  "latitude": 51.8403,
-  "longitude": -1.3625,
-  "location_name": "Blenheim Palace",
-  "device_name": "Built-in Microphone"
+  "site_name": "Charlbury",
+  "site_latitude": 51.8403,
+  "site_longitude": -1.3625,
+  "location_name": "Garden",
+  "location_latitude": 51.8699,
+  "location_longitude": -1.4794
 }
 ```
+
+| Field | Description |
+|---|---|
+| `site_name` | Name of the monitoring site (`location.name` in settings) |
+| `site_latitude` / `site_longitude` | Coordinates of the site |
+| `location_name` | Name of the specific monitoring location (mic position) |
+| `location_latitude` / `location_longitude` | Coordinates of that mic position from the `mics:` list |
+| `species_image` | Pre-normalised image filename (e.g. `"robin.jpg"`) — ready to use without string manipulation |
+
+`location_name` and its coordinates will be empty/null if no location has been assigned to the classifier in `classifiers.locations`.
+
+### Locations payload
+
+The retained `bioacoustics/locations` message contains the current list of monitoring locations with their coordinates:
+
+```json
+{
+  "mics": [
+    { "name": "Garden", "latitude": 51.8699, "longitude": -1.4794 },
+    { "name": "Inside Panel Area", "latitude": 51.8587, "longitude": -1.3391 }
+  ]
+}
+```
+
+This is published once on connect and whenever the microphone list changes.
 
 ### Monitor live detections
 
@@ -467,10 +552,43 @@ sudo systemctl restart mosquitto
 Edit `config/settings.yaml` to adjust behaviour without touching code.
 
 ```yaml
-bird:
-  min_confidence: 0.35      # detections below this are ignored
-  latitude: 51.8403         # used by BirdNET for species filtering
+location:
+  name: "Charlbury"         # site name — appears in every MQTT detection payload
+  latitude: 51.8403
   longitude: -1.3625
+
+mics:                       # monitoring locations (individual mic positions)
+  - name: "Garden"
+    latitude: 51.8699
+    longitude: -1.4794
+  - name: "Inside Panel Area"
+    latitude: 51.8587
+    longitude: -1.3391
+
+classifiers:
+  active:
+    - bird
+    - bat
+    - bee
+  devices:
+    bird: alsa_input.usb-openacousticdevices...  # PipeWire source name (from list-devices)
+    bat:  alsa_input.usb-openacousticdevices...
+    bee:  null                                    # null = use audio.device default
+  locations:
+    bird: "Garden"          # which monitoring location each classifier listens from
+    bat:  "Garden"
+
+bird:
+  min_confidence: 0.35      # detections below this are ignored (0–1)
+  latitude: 51.8403         # used by BirdNET for species filtering; kept in sync with location:
+  longitude: -1.3625
+  sample_rate: 48000
+
+bat:
+  capture_rate: 384000      # must match your ultrasonic microphone's sample rate
+  min_det_confidence: 0.75  # minimum call-presence probability (0–1)
+  min_class_confidence: 0.6 # minimum species-ID probability (0–1)
+  silence_threshold: 0.002  # RMS below this skips inference — filters USB noise
 
 schedule:
   timezone: "Europe/London"
@@ -479,20 +597,38 @@ schedule:
       anchor: sunrise       # sunrise | sunset | noon | fixed
       offset_mins: -30      # start 30 min before sunrise
       duration_mins: 150
+    - name: morning_song
+      anchor: sunrise
+      offset_mins: 150
+      duration_mins: 60
+    - name: dusk
+      anchor: sunset
+      offset_mins: -60
+      duration_mins: 90
 
   adaptive:
-    nocturnal:              # triggers a 23:00 night window if detected
+    nocturnal:              # triggers a 23:00 night window if any of these are detected
       - "Tawny Owl"
       - "Barn Owl"
+    early_morning:          # triggers a pre-dawn window
+      - "Common Nightingale"
+      - "Song Thrush"
 
 mqtt:
   enabled: true
   host: "localhost"
   port: 1883
   topic_prefix: "bioacoustics"
+  tls: false
 ```
 
-To listen on a specific microphone, run `list-devices` and set `audio.device` to the device index.
+To discover available microphone source names, run:
+
+```bash
+.venv/bin/python -m ecoacoustics.main list-devices
+```
+
+Assign the PipeWire source name (e.g. `alsa_input.usb-openacousticdevices...`) to the relevant classifier under `classifiers.devices`.
 
 ---
 
@@ -549,6 +685,13 @@ Times shift daily with sunrise/sunset. Run `status` to see exact times for today
 │   ├── scheduler.py                # Dawn/dusk window calculation and adaptation
 │   ├── session.py                  # Per-session species call counting
 │   └── main.py                     # CLI entry point (wake, schedule, status, web)
+├── viewer/
+│   ├── index.html              # BASE Viewer — ambient kiosk display
+│   ├── viewer.js               # Gallery, MQTT, sounds, image management
+│   ├── viewer.css              # Full-screen dark layout
+│   └── assets/
+│       ├── images/             # Per-species stock photos (bundled)
+│       └── sounds/             # Per-species default sounds (optional)
 ├── tests/
 │   └── test_pipeline.py
 ├── start_web.sh                    # One-click web UI launcher

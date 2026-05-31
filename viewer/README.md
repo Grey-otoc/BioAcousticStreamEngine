@@ -1,76 +1,150 @@
 # BASE Viewer
 
-A standalone browser app that subscribes to a BASE MQTT feed and displays live species detections as they arrive — a real-time photo gallery with an ambient soundscape.
+An ambient live-detection display that subscribes to a BASE MQTT feed and shows incoming species detections as a full-screen photo gallery with sounds. Designed for kiosk screens, public displays, remote monitoring rooms, and Yodeck deployments.
 
-No installation, no server, no dependencies to install. Open `index.html` in a browser.
+Served automatically at `http://localhost:8000/viewer/` when the BASE web UI is running. Also works as a standalone page (`viewer/index.html`) opened directly in a browser against any accessible MQTT broker.
 
 ---
 
-## Features
+## What the viewer shows
 
-- **Live gallery** — species cards appear and reorder in real time as detections arrive via MQTT
-- **Soundscape** — upload up to 5 recordings per species; one plays randomly each time that species is detected, building a live audio picture of what's happening at the remote site
-- **Per-species photos** — upload your own image for any species; stored locally in the browser (IndexedDB, persists across sessions)
-- **First / last detected timestamps** on every card
-- **Confidence score** colour-coded on each card (green / amber / red)
-- **Auto-reconnect** — recovers from broker disconnects automatically
+Each species detected by BASE appears as a card in the gallery:
+
+| Card element | Description |
+|---|---|
+| **Photo** | Species photograph — bundled stock image or your own upload |
+| **Common name** | e.g. *Robin* |
+| **Scientific name** | e.g. *Erithacus rubecula* |
+| **Confidence badge** | Colour-coded: green ≥70%, amber ≥45%, red below |
+| **Detection count** | `×N` — how many times detected this session |
+| **Location** | `Site · Monitoring Location` (e.g. *Charlbury · Garden*) |
+| **First / last seen** | Timestamps of first and most recent detection |
+
+Cards are sorted most-recent-first and reorder live as new detections arrive. When more cards are present than fit in three rows the gallery scrolls.
+
+Detections from **different sites are always kept on separate cards** — a Robin at Charlbury and a Robin at Weaveley Solar will appear as two distinct cards and never merge.
+
+---
+
+## Animated listening state
+
+When no species have been detected yet (or after the gallery has fully expired), the viewer shows a pulsing bar animation with the label *Listening…* to confirm the system is live and connected.
 
 ---
 
 ## Getting started
 
-1. Open `viewer/index.html` in Chrome, Firefox, or Edge
-2. Click **⚙ Settings** and fill in your broker details (see below)
-3. Click **Save & Connect**
-4. Click **🔇 Enable sounds** to allow audio playback
+### Via BASE (recommended)
+
+1. Start the BASE web server: `bash start_web.sh`
+2. Open `http://localhost:8000/viewer/` in a browser
+3. Click **⚙ Settings** and enter your MQTT broker URL and topic prefix
+4. Click **Save & Connect**
+5. Click the sound button to enable audio playback (required by browser security policy)
+
+The viewer is served from the same origin as the BASE API, so it automatically picks up the monitoring location configuration from the API.
+
+### Standalone (no BASE server)
+
+Open `viewer/index.html` directly in Chrome, Firefox, or Edge. The MQTT broker must be reachable via WebSocket (`wss://` or `ws://`). Configure connection details in **⚙ Settings**.
 
 ---
 
-## MQTT setup
+## Connection settings
 
-| Setting | Value |
+| Setting | Description |
 |---|---|
-| Broker URL | `wss://u1d78101.ala.eu-central-1.emqxsl.com:8084/mqtt` |
-| Topic prefix | `bioacoustics` (must match BASE's `topic_prefix` in settings) |
-| Username / Password | Same credentials as BASE |
+| **Broker URL** | WebSocket URL of your MQTT broker — must start with `wss://`, `ws://`, or `mqtts://`. Example: `wss://your-broker:8084/mqtt` |
+| **Topic prefix** | Must match `topic_prefix` in BASE `settings.yaml` (default: `bioacoustics`) |
+| **Username / Password** | Broker credentials — stored only in the browser, never sent to any server |
 
-The URL must include a scheme: `wss://`, `ws://`, or `mqtts://`.
+Settings are saved in the browser's `localStorage` and persist across page reloads.
 
-### Local Mosquitto
+---
 
-Add WebSocket support to `/etc/mosquitto/mosquitto.conf`:
+## URL parameters
+
+The viewer accepts URL parameters to pre-configure behaviour — useful for kiosk deployments where you cannot interact with the settings panel.
+
+| Parameter | Description | Example |
+|---|---|---|
+| `broker` | Broker WebSocket URL — auto-connects on load | `?broker=wss://host:8084/mqtt` |
+| `prefix` | Topic prefix (default: `bioacoustics`) | `?prefix=bioacoustics` |
+| `probability` | Confidence threshold (0–1) pre-set on load | `?probability=0.65` |
+
+Do not include broker credentials in the URL if the URL will be visible to others or stored in a shared system. Enter credentials once through the Settings panel instead — they are stored locally in the browser.
+
+---
+
+## Confidence filter
+
+A slider in the header controls the minimum confidence score required for a card to appear. Cards below the threshold are hidden but not deleted — raising the slider again brings them back.
+
+The threshold is remembered in `localStorage` across sessions. It can also be pre-set via the `probability` URL parameter (see above).
+
+---
+
+## Auto-expiry
+
+Cards are automatically removed after **30 minutes of no new detections** for that species. A background check runs every 2 minutes. This keeps the display current: when a recording session ends, the gallery gradually clears rather than showing stale species indefinitely.
+
+When the page is reloaded, today's cached gallery is restored from `localStorage`. Any entries that have aged past 30 minutes are discarded immediately on load.
+
+---
+
+## Sounds
+
+Upload up to 5 audio recordings per species (MP3, WAV, OGG). Each time that species is detected, one is chosen at random and played. Up to 3 sounds can play simultaneously to create a natural ambient soundscape.
+
+1. Click any species card to open the detail panel
+2. Under **Sounds**, click **+ Upload** and select files
+3. Click **▶** to preview; **✕** to delete
+4. Default sounds (if present in `assets/sounds/<species>.mp3`) play automatically before any custom recordings are uploaded
+
+Sounds are stored in the browser's IndexedDB and persist across sessions on the same device.
+
+---
+
+## Photos
+
+108 UK species stock images are bundled in `assets/images/`, sourced from Wikimedia Commons under open licences.
+
+To replace a stock image or add one for a new species:
+
+1. Click a species card → detail panel opens
+2. Click **+ Upload your own** (or **↑ Replace photo**) and select a JPEG, PNG, or WebP file
+3. The photo is stored in IndexedDB and replaces the stock image immediately
+
+Photos persist across sessions on the same browser and device but are not shared across devices.
+
+---
+
+## Explainer panel
+
+A collapsible **How BASE Works** section introduces the system to visitors unfamiliar with bioacoustic monitoring. On desktop, click **✕** in the panel header to hide it — the viewer remembers this preference. Click **ℹ** in the top-right of the header to show it again. On mobile it opens as a centred modal.
+
+---
+
+## Local Mosquitto (WebSocket)
+
+If connecting to a local Mosquitto broker, add WebSocket support to `/etc/mosquitto/mosquitto.conf`:
 
 ```
 listener 9001
 protocol websockets
 ```
 
-Then use `ws://localhost:9001` as the broker URL.
+Restart Mosquitto: `sudo systemctl restart mosquitto`
+
+Then use `ws://localhost:9001` (or the machine's IP) as the broker URL in the viewer settings.
 
 ---
 
-## Adding photos
+## Browser storage
 
-1. Detections arrive → cards appear with a placeholder if no photo is set
-2. Click any card → **+ Add photo** to upload a JPEG, PNG, or WebP
-3. Photos are stored in your browser's IndexedDB and persist across sessions
+| Storage type | What is stored |
+|---|---|
+| `localStorage` | Settings (broker URL, prefix, sound on/off, confidence threshold, explainer state), today's species gallery cache |
+| `IndexedDB` | Custom species photos and uploaded sound clips |
 
----
-
-## Adding sounds
-
-1. Click any species card to open the detail panel
-2. Under **Sounds**, click **+ Add sounds** and select up to 5 audio files (MP3, WAV, OGG)
-3. Each time that species is detected, one file is chosen at random and played
-4. Up to 3 sounds can play simultaneously to create a natural soundscape
-5. Click **▶** to preview a sound; **✕** to remove it
-
-Sounds are stored locally in IndexedDB. They persist across sessions but are specific to the browser and device.
-
----
-
-## Notes
-
-- All settings and data are stored in the browser — clearing browser storage will remove photos, sounds, and settings
-- Audio playback requires a user gesture first (browser security policy) — click **🔇 Enable sounds** after opening the page
-- The viewer only receives detections that arrive while it is open; it does not replay historical detections
+Clearing browser storage (DevTools → Application → Storage → Clear) will remove all photos, sounds, the gallery cache, and saved settings.
