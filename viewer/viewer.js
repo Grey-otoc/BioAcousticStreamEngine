@@ -338,7 +338,12 @@ function loadGalleryFromStorage() {
   try {
     const stored = JSON.parse(localStorage.getItem('base-viewer-gallery') || 'null');
     if (stored?.date === _todayKey() && stored.gallery) {
-      Object.assign(gallery, stored.gallery);
+      for (const entry of Object.values(stored.gallery)) {
+        if (!entry?.det?.species_common) continue;
+        const det = _normalizeDet(entry.det);
+        const eid = _entryId(det);
+        gallery[eid] = { ...entry, det, entryId: eid, key: _speciesKey(det.species_common) };
+      }
     }
   } catch { /* corrupt data — start fresh */ }
 }
