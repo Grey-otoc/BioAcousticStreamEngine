@@ -1861,56 +1861,57 @@ function _buildFreqAxis(sampleRate, logScale) {
     .join('');
 }
 
-// Populate the spectrogram mic dropdown from pactl (server) + browser device APIs.
-// Merges both sources so Linux/PipeWire users see all physical inputs.
+// Populate the spectrogram mic dropdown using browser deviceIds from enumerateDevices().
+// Browser deviceIds are the only values getUserMedia accepts reliably — PipeWire source
+// names look similar but are a different identifier space and getUserMedia ignores them,
+// causing the spectrogram to silently fall back to the system default on every switch.
 async function _populateSpecDevices() {
   try {
+    // One-time getUserMedia call to unlock real device labels (browser security requirement)
     const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
     tmp.getTracks().forEach(t => t.stop());
-
-    const [browserDevices, serverData] = await Promise.all([
-      navigator.mediaDevices.enumerateDevices(),
-      api.get('/api/devices').catch(() => ({ devices: [] })),
-    ]);
 
     const sel = document.getElementById('spec-device');
     if (!sel) return;
     const prev = sel.value;
     sel.innerHTML = '<option value="">System default</option>';
 
-    serverData.devices.forEach(d => {
-      const opt = document.createElement('option');
-      opt.value = d.name;
-      opt.textContent = `${d.is_default ? '★ ' : ''}${d.label || d.name} (${(d.sample_rate/1000).toFixed(0)}kHz)`;
-      sel.appendChild(opt);
-    });
-
-    const serverNames = new Set(serverData.devices.map(d => d.label || d.name));
-    browserDevices
-      .filter(d => d.kind === 'audioinput' && d.deviceId !== 'default' && d.deviceId !== '')
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    devices
+      .filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default')
       .forEach(d => {
-        if (!serverNames.has(d.label)) {
-          const opt = document.createElement('option');
-          opt.value = d.deviceId;
-          opt.textContent = d.label || `Microphone (${d.deviceId.slice(0, 8)})`;
-          sel.appendChild(opt);
-        }
+        const opt = document.createElement('option');
+        opt.value    = d.deviceId;          // browser deviceId — works with getUserMedia
+        opt.dataset.label = d.label || '';  // stored for sync matching
+        opt.textContent   = d.label || `Microphone (${d.deviceId.slice(0, 8)})`;
+        sel.appendChild(opt);
       });
 
-    // Restore previous selection if still available
+    // Restore previous selection if the same deviceId is still present
     if (prev && sel.querySelector(`option[value="${CSS.escape(prev)}"]`)) sel.value = prev;
-  } catch (_) {}
+  } catch (e) {
+    console.warn('Spectrogram device list:', e);
+  }
 }
 
-// Sync the spectrogram mic to whichever pipeline is currently running,
-// so the visual and the detector always show the same source.
+// Sync the spectrogram mic to the running pipeline when exactly one mic is active.
+// Matches the pipeline's device_name against browser device labels by shared keywords.
+// Does nothing when multiple mics are running — user must choose manually.
 function _syncSpecToRunningDevice() {
   const sel = document.getElementById('spec-device');
   if (!sel || !state.status) return;
-  const running = Object.values(state.status.pipelines || {}).find(p => p.state !== 'idle');
-  if (!running || !running.device_name) return;
+  const running = Object.values(state.status.pipelines || {})
+    .filter(p => p.state !== 'idle' && p.device_name);
+  if (running.length !== 1) return;  // ambiguous with multiple mics — don't guess
+
+  // Strip the "USB Mic — " prefix added by our friendly-name formatter
+  const target = running[0].device_name.toLowerCase().replace(/^usb mic\s*[—\-]\s*/i, '');
+  const keywords = target.split(/\W+/).filter(w => w.length >= 3);
+
   for (const opt of sel.options) {
-    if (opt.value && opt.textContent.includes(running.device_name)) {
+    if (!opt.value) continue;
+    const label = (opt.dataset.label || opt.textContent).toLowerCase();
+    if (keywords.some(w => label.includes(w))) {
       if (sel.value === opt.value) return;
       sel.value = opt.value;
       if (_spec.running) { _stopSpectrogram(); _startSpectrogram(); }
