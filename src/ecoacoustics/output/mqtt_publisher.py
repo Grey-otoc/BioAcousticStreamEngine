@@ -92,17 +92,18 @@ class MqttPublisher:
             _log.warning("MQTT: could not connect to %s:%d — %s", host, port, exc)
 
     def publish_locations(self) -> None:
-        """Publish mic locations and classifier→location mapping to {prefix}/locations (retained)."""
-        payload = json.dumps({
-            "mics": self._mics,
-            "classifier_locations": self._classifier_locations,
-        }, ensure_ascii=False)
+        """Publish mic locations to {prefix}/locations (retained)."""
+        payload = json.dumps({"mics": self._mics}, ensure_ascii=False)
         self._client.publish(f"{self._prefix}/locations", payload, retain=True)
         _log.info("MQTT: published %d mic location(s)", len(self._mics))
 
     def publish(self, det: Detection, session: Session, call_n: int) -> None:
         """Publish a single detection to the broker."""
         ts = datetime.datetime.fromtimestamp(det.timestamp)
+        # Monitoring location name comes from classifiers.locations stamped onto the detection.
+        loc_name = det.metadata.get("mic_name", "")
+        # Look up the monitoring location's coordinates from the mics list.
+        mic_info = next((m for m in self._mics if m.get("name") == loc_name), {})
         payload = {
             "session_id": session.session_id,
             "window_name": session.window_name,
@@ -114,10 +115,12 @@ class MqttPublisher:
             "species_image": re.sub(r"[^a-z0-9]+", "_", det.label.lower().replace("'", "")).strip("_") + ".jpg",
             "confidence": round(det.confidence, 4),
             "call_number_in_session": call_n,
-            "location_name": self._location_name,
-            "mic_name": det.metadata.get("mic_name", ""),
-            "latitude": self._lat,
-            "longitude": self._lon,
+            "site_name": self._location_name,
+            "site_latitude": self._lat,
+            "site_longitude": self._lon,
+            "location_name": loc_name,
+            "location_latitude": mic_info.get("latitude"),
+            "location_longitude": mic_info.get("longitude"),
         }
         message = json.dumps(payload)
         self._client.publish(f"{self._prefix}/detections", message)

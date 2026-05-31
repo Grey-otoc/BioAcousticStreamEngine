@@ -17,7 +17,7 @@ const PLACEHOLDER = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
 
 // ── State ────────────────────────────────────────────────────────────────────
 
-const gallery   = {};   // speciesCommon → entry
+const gallery   = {};   // entryId → entry  (keyed by species + site + location)
 const imgCache  = {};   // speciesKey    → object URL (or PLACEHOLDER)
 let activeAudio   = 0;
 let soundEnabled  = true;
@@ -182,15 +182,10 @@ function connect() {
   mqttClient.on('message', (_topic, payload) => {
     try {
       const data = JSON.parse(payload.toString());
-      if (data.classifier_locations !== undefined) {
-        // New /locations format: {mics:[…], classifier_locations:{bird:"Garden",…}}
-        Object.assign(classifierLocMap, data.classifier_locations || {});
-        renderGallery();
-      } else if (Array.isArray(data)) {
-        // Legacy /locations format: bare array of mics — no classifier mapping
-      } else if (data.species_common) {
+      if (data.species_common) {
         updateGallery(data);
       }
+      // /locations messages (mics array) require no action in the viewer
     } catch { /* ignore malformed */ }
   });
 
@@ -205,7 +200,24 @@ function disconnect() {
   setConnStatus('disconnected', 'Disconnected');
 }
 
-const classifierLocMap = {};  // classifier → monitoring location name (from /locations)
+// _entryId: unique gallery key — species + site + monitoring location, never mixes sites
+function _entryId(det) {
+  const sp   = _speciesKey(det.species_common || '');
+  const site = _speciesKey(det.site_name || '');
+  const loc  = _speciesKey(det.location_name || '');
+  const suffix = [site, loc].filter(Boolean).join('_');
+  return suffix ? `${sp}__${suffix}` : sp;
+}
+
+// Normalise detections from older pipeline versions that used location_name=site, mic_name=location.
+function _normalizeDet(det) {
+  if (det.site_name !== undefined) return det;   // already new format
+  return {
+    ...det,
+    site_name:     det.location_name || '',
+    location_name: det.mic_name      || '',
+  };
+}
 
 function setConnStatus(state, label) {
   const dot   = document.getElementById('conn-dot');
@@ -218,20 +230,22 @@ function setConnStatus(state, label) {
 
 // ── Gallery ──────────────────────────────────────────────────────────────────
 
-function updateGallery(det) {
-  const name = det.species_common;
-  const key  = _speciesKey(name);
-  const ts   = (det.date && det.time) ? new Date(det.date + 'T' + det.time).getTime() : Date.now();
+function updateGallery(rawDet) {
+  const det    = _normalizeDet(rawDet);
+  const key    = _speciesKey(det.species_common);
+  const eid    = _entryId(det);
+  const ts     = (det.date && det.time) ? new Date(det.date + 'T' + det.time).getTime() : Date.now();
 
-  if (!gallery[name]) {
-    gallery[name] = {
-      det, key, count: 1, bestConf: det.confidence,
+  if (!gallery[eid]) {
+    gallery[eid] = {
+      det, key, entryId: eid, count: 1, bestConf: det.confidence,
       firstSeen:  { date: det.date, time: det.time },
       lastSeen:   { date: det.date, time: det.time },
       lastSeenTs: ts,
     };
   } else {
-    const e = gallery[name];
+    const e = gallery[eid];
+    e.det        = det;   // always refresh so location stays accurate
     e.count++;
     if (det.confidence > e.bestConf) e.bestConf = det.confidence;
     e.lastSeen   = { date: det.date, time: det.time };
@@ -239,14 +253,14 @@ function updateGallery(det) {
   }
 
   saveGalleryToStorage();
-  renderGallery(name);
+  renderGallery(eid);
   playDetectionSound(key);
 }
 
 function getFilteredEntries() {
   return Object.values(gallery)
     .filter(e => e.bestConf >= probabilityThreshold)
-    .filter(e => !locationFilter || (e.det.location_name || '').toLowerCase() === locationFilter.toLowerCase())
+    .filter(e => !locationFilter || [e.det.site_name, e.det.location_name].some(v => (v || '').toLowerCase() === locationFilter.toLowerCase()))
     .sort((a, b) => (b.lastSeenTs || 0) - (a.lastSeenTs || 0));
 }
 
@@ -269,8 +283,7 @@ function renderGallery(flashName) {
   setTimeout(updateGridLayout, 0);
 
   if (flashName) {
-    const key = _speciesKey(flashName);
-    const el  = document.getElementById('card-' + key);
+    const el = document.getElementById('card-' + flashName);
     if (el) {
       el.classList.remove('flash');
       void el.offsetWidth;
@@ -280,13 +293,12 @@ function renderGallery(flashName) {
 }
 
 function galleryCard(entry) {
-  const { det, key, count, bestConf, firstSeen, lastSeen } = entry;
+  const { det, key, entryId, count, bestConf, firstSeen, lastSeen } = entry;
   const pct = Math.round(bestConf * 100);
-  const micLabel = det.mic_name || classifierLocMap[det.classifier] || '';
-  const locDisplay = [det.location_name, micLabel].filter(Boolean).join(' · ');
+  const locDisplay = [det.site_name, det.location_name].filter(Boolean).join(' · ');
 
   return `
-    <div class="gallery-card" id="card-${key}" onclick="showSpeciesDetail('${det.species_common.replace(/'/g, "\\'")}')">
+    <div class="gallery-card" id="card-${entryId}" onclick="showSpeciesDetail('${entryId.replace(/'/g, "\\'")}')">
       <div class="card-img-wrap">
         <img src="${_imgSrc(key)}" alt="${det.species_common}"
              onerror="this.onerror=null;this.src='${PLACEHOLDER}';this.classList.add('img-placeholder')">
@@ -468,13 +480,13 @@ function applySettings(e) {
 
 // ── Species detail modal ──────────────────────────────────────────────────────
 
-async function showSpeciesDetail(speciesName) {
-  const entry = gallery[speciesName];
+async function showSpeciesDetail(entryId) {
+  const entry = gallery[entryId];
   if (!entry) return;
-  document.getElementById('modal-title').textContent = speciesName;
+  document.getElementById('modal-title').textContent = entry.det.species_common;
   document.getElementById('modal-overlay').classList.add('open');
   document.getElementById('species-modal').classList.add('open');
-  await _renderModalBody(speciesName, entry.key, entry);
+  await _renderModalBody(entryId, entry.key, entry);
 }
 
 function hideModal() {
@@ -482,26 +494,28 @@ function hideModal() {
   document.getElementById('species-modal').classList.remove('open');
 }
 
-async function _renderModalBody(speciesName, key, entry) {
+async function _renderModalBody(entryId, key, entry) {
   const { det, count } = entry;
   const sounds = await dbGet('sounds', key);
   const clips  = sounds?.clips || [];
   const hasImg = imgCache[key] && imgCache[key] !== PLACEHOLDER;
+  const locDisplay = [det.site_name, det.location_name].filter(Boolean).join(' · ');
+  const safeEid = entryId.replace(/'/g, "\\'");
 
   const soundItems = clips.map((c, i) => `
     <li class="sound-item">
       <span class="sound-name">${c.name}</span>
       <button class="btn btn-sm btn-outline" onclick="previewSound('${key}', ${i})">▶</button>
-      <button class="btn btn-sm btn-danger" onclick="deleteSound('${key}', ${i}, '${speciesName.replace(/'/g, "\\'")}')">✕</button>
+      <button class="btn btn-sm btn-danger" onclick="deleteSound('${key}', ${i}, '${safeEid}')">✕</button>
     </li>`).join('');
 
   document.getElementById('modal-body').innerHTML = `
-    ${hasImg ? `<img class="modal-img" src="${imgCache[key]}" alt="${speciesName}">` : ''}
+    ${hasImg ? `<img class="modal-img" src="${imgCache[key]}" alt="${det.species_common}">` : ''}
 
     <div class="modal-meta">
       ${det.species_scientific ? `<em>${det.species_scientific}</em><br>` : ''}
       ${count} detection${count !== 1 ? 's' : ''} this session
-      ${det.location_name ? ' · ' + det.location_name : ''}
+      ${locDisplay ? ' · ' + locDisplay : ''}
     </div>
 
     <hr class="modal-divider">
@@ -511,7 +525,7 @@ async function _renderModalBody(speciesName, key, entry) {
     <label class="upload-area">
       ${hasImg ? '↑ Replace photo' : '+ Upload your own'} (JPEG, PNG, WebP)
       <input type="file" accept="image/jpeg,image/png,image/webp" style="display:none"
-             onchange="uploadImage('${key}', this, '${speciesName.replace(/'/g, "\\'")}')">
+             onchange="uploadImage('${key}', this, '${safeEid}')">
     </label>
 
     <hr class="modal-divider">
@@ -522,13 +536,13 @@ async function _renderModalBody(speciesName, key, entry) {
     <label class="upload-area">
       + Upload your own sound${clips.length ? 's' : ''} (MP3, WAV, OGG — up to ${MAX_SOUNDS - clips.length} more)
       <input type="file" accept="audio/*" multiple style="display:none"
-             onchange="uploadSounds('${key}', this, '${speciesName.replace(/'/g, "\\'")}')">
+             onchange="uploadSounds('${key}', this, '${safeEid}')">
     </label>` : ''}`;
 }
 
 // ── Image management ──────────────────────────────────────────────────────────
 
-async function uploadImage(key, input, speciesName) {
+async function uploadImage(key, input, entryId) {
   const file = input.files[0];
   if (!file) return;
   const data = await file.arrayBuffer();
@@ -536,13 +550,13 @@ async function uploadImage(key, input, speciesName) {
   if (imgCache[key]) URL.revokeObjectURL(imgCache[key]);
   imgCache[key] = URL.createObjectURL(new Blob([data], { type: file.type }));
   renderGallery();
-  const entry = gallery[speciesName];
-  if (entry) await _renderModalBody(speciesName, key, entry);
+  const entry = gallery[entryId];
+  if (entry) await _renderModalBody(entryId, key, entry);
 }
 
 // ── Sound management ──────────────────────────────────────────────────────────
 
-async function uploadSounds(key, input, speciesName) {
+async function uploadSounds(key, input, entryId) {
   const files  = Array.from(input.files);
   const record = (await dbGet('sounds', key)) || { key, clips: [] };
   const slots  = MAX_SOUNDS - record.clips.length;
@@ -551,11 +565,11 @@ async function uploadSounds(key, input, speciesName) {
     record.clips.push({ name: file.name, data, mime: file.type });
   }
   await dbPut('sounds', record);
-  const entry = gallery[speciesName];
-  if (entry) await _renderModalBody(speciesName, key, entry);
+  const entry = gallery[entryId];
+  if (entry) await _renderModalBody(entryId, key, entry);
 }
 
-async function deleteSound(key, index, speciesName) {
+async function deleteSound(key, index, entryId) {
   const record = await dbGet('sounds', key);
   if (!record) return;
   record.clips.splice(index, 1);
@@ -564,8 +578,8 @@ async function deleteSound(key, index, speciesName) {
   } else {
     await dbDelete('sounds', key);
   }
-  const entry = gallery[speciesName];
-  if (entry) await _renderModalBody(speciesName, key, entry);
+  const entry = gallery[entryId];
+  if (entry) await _renderModalBody(entryId, key, entry);
 }
 
 async function previewSound(key, index) {
@@ -661,16 +675,6 @@ async function init() {
   db = await openDb();
   await preloadImageCache();
   await loadImageManifest();
-
-  // Fetch classifier → monitoring location mapping from the API.
-  // Works when the viewer is served via the BASE dashboard (/viewer/).
-  try {
-    const resp = await fetch('/api/settings/classifier_locations');
-    if (resp.ok) {
-      const map = await resp.json();
-      Object.assign(classifierLocMap, map);
-    }
-  } catch { /* viewer served standalone — will use /locations MQTT message instead */ }
 
   // URL params override stored settings — useful for kiosk/Yodeck deployments
   // where you can't interact with the settings panel.
