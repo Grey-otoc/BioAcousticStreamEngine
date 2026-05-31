@@ -341,6 +341,12 @@ tr:hover td { background: var(--surface2); }
 .sched-tag { font-size: 0.68rem; font-weight: 600; padding: 2px 7px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.04em; }
 .sched-active { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); border: 1px solid color-mix(in srgb, var(--success) 40%, transparent); }
 .sched-next { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent); }
+.clf-tag { font-size: 0.65rem; font-weight: 500; padding: 2px 6px; border-radius: 20px; }
+.clf-bird   { background: color-mix(in srgb, #3fb950 12%, transparent); color: #3fb950; border: 1px solid color-mix(in srgb, #3fb950 30%, transparent); }
+.clf-bat    { background: color-mix(in srgb, #a371f7 12%, transparent); color: #a371f7; border: 1px solid color-mix(in srgb, #a371f7 30%, transparent); }
+.clf-bee    { background: color-mix(in srgb, #d29922 12%, transparent); color: #d29922; border: 1px solid color-mix(in srgb, #d29922 30%, transparent); }
+.clf-insect { background: color-mix(in srgb, #56d364 12%, transparent); color: #56d364; border: 1px solid color-mix(in srgb, #56d364 30%, transparent); }
+.clf-soil   { background: color-mix(in srgb, #768390 12%, transparent); color: #768390; border: 1px solid color-mix(in srgb, #768390 30%, transparent); }
 .device-meta { font-size: 0.73rem; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
 .device-status { font-size: 0.75rem; font-weight: 600; }
 .device-status.running { color: var(--primary); }

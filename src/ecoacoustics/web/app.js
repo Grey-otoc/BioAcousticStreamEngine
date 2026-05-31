@@ -299,11 +299,12 @@ async function refreshDevicePanel() {
   const panel = document.getElementById('device-panel');
   if (!panel) return;
   try {
-    const [devData, statusData, micsData, schedData] = await Promise.all([
+    const [devData, statusData, micsData, schedData, clfData] = await Promise.all([
       api.get('/api/devices'),
       state.status ? Promise.resolve(state.status) : api.get('/api/status'),
       api.get('/api/settings/mics').catch(() => []),
       api.get('/api/schedule').catch(() => ({ windows: [] })),
+      api.get('/api/settings/classifiers').catch(() => ({ active: [], devices: {} })),
     ]);
 
     const schedWindows = schedData.windows || [];
@@ -325,6 +326,14 @@ async function refreshDevicePanel() {
     const pipelines = statusData.pipelines || {};
     const deviceLocs = _loadDeviceLocs();
 
+    // Build reverse map: PipeWire source name → active classifiers assigned to it
+    const clfActive = new Set(clfData.active || []);
+    const deviceClfMap = {};
+    for (const [clf, devName] of Object.entries(clfData.devices || {})) {
+      if (!devName || !clfActive.has(clf)) continue;
+      (deviceClfMap[devName] = deviceClfMap[devName] || []).push(clf);
+    }
+
     if (!devData.devices.length) {
       panel.innerHTML = '<div class="empty">No audio input devices found. Check that a microphone is connected.</div>';
       return;
@@ -344,13 +353,17 @@ async function refreshDevicePanel() {
                      : d.state === 'SUSPENDED' ? '<span style="color:var(--muted)">○ suspended</span>'
                      : '';
       const assignedLoc = deviceLocs[key] || '';
+      const clfTags = (deviceClfMap[d.name] || []).map(clf => {
+        const meta = CLASSIFIERS.find(c => c.key === clf);
+        return meta ? `<span class="clf-tag clf-${clf}">${meta.icon} ${meta.label}</span>` : '';
+      }).join('');
       const locSelector = locOptions
         ? `<select class="device-loc-select" title="Monitoring location" onchange="_saveDeviceLoc('${key}',this.value)">${locOptions.replace(`value="${escHtml(assignedLoc)}"`, `value="${escHtml(assignedLoc)}" selected`)}</select>`
         : '';
       return `
         <div class="device-row ${isRunning ? 'running' : ''}">
           <div class="device-info">
-            <div class="device-name">${d.is_default ? '★ ' : ''}${d.label || d.name}${schedTag}</div>
+            <div class="device-name">${d.is_default ? '★ ' : ''}${d.label || d.name}${schedTag}${clfTags}</div>
             <div class="device-meta">${d.channels}ch · ${hz}kHz${stateTag ? ' · ' : ''}${stateTag}</div>
           </div>
           ${locSelector}
