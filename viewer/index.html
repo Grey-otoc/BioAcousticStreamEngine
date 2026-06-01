@@ -57,8 +57,8 @@
     <form id="settings-form" onsubmit="applySettings(event)">
       <div class="form-group">
         <label>Broker WebSocket URL</label>
-        <input type="text" id="s-url" placeholder="wss://...8084/mqtt" spellcheck="false" oninput="checkBrokerUrl()">
-        <small>EMQX WebSocket: <strong>wss://u1d78101.ala.eu-central-1.emqxsl.com:8084/mqtt</strong><br>Port 8883 is TCP-only and won't work in a browser.</small>
+        <input type="text" id="s-url" placeholder="wss://your-broker:8084/mqtt" spellcheck="false" oninput="checkBrokerUrl()">
+        <small>Use <strong>wss://</strong> (WebSocket TLS) or <strong>ws://</strong> for local. Port 8883 is TCP-only and won't work in a browser.</small>
         <div id="url-warn" style="display:none;margin-top:6px;padding:7px 10px;background:rgba(210,153,34,0.15);border:1px solid var(--warning);border-radius:var(--radius);font-size:0.75rem;color:var(--warning);line-height:1.5"></div>
       </div>
       <div class="form-group">
