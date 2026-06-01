@@ -96,7 +96,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
 # ── Static files — mounted last so it only catches unmatched requests ──
 _web_dir    = Path(__file__).parent.parent / "web"
-_viewer_dir = Path(__file__).parents[4] / "viewer"
+_viewer_dir = Path(__file__).parents[3] / "viewer"
 if _viewer_dir.exists():
     app.mount("/viewer", NoCacheStaticFiles(directory=str(_viewer_dir), html=True), name="viewer")
 app.mount("/", NoCacheStaticFiles(directory=str(_web_dir), html=True), name="web")
