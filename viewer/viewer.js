@@ -393,10 +393,12 @@ function _updateSoundBtn() {
   const btn = document.getElementById('sound-unlock-btn');
   if (!btn) return;
   if (soundEnabled) {
-    btn.textContent = '🔊 Sounds on';
+    btn.textContent = '🔊';
+    btn.title = 'Sounds on';
     btn.classList.add('sound-on');
   } else {
-    btn.textContent = '🔇 Sounds off';
+    btn.textContent = '🔇';
+    btn.title = 'Sounds off';
     btn.classList.remove('sound-on');
   }
 }
