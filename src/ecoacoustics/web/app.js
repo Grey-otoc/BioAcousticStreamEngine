@@ -248,7 +248,10 @@ function renderDashboard() {
         <div class="card">
           <div style="display:flex;align-items:center;justify-content:space-between">
             <div class="card-title" style="margin:0">Live Spectrogram ${helpBtn('spectrogram')}</div>
-            <button class="btn btn-sm btn-outline" id="btn-spec-toggle" onclick="toggleSpectrogram()">■ Stop</button>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button class="btn btn-sm btn-outline" id="btn-spec-monitor" onclick="toggleMonitor()" title="Listen in" style="font-size:1rem;padding:4px 8px">🎧</button>
+              <button class="btn btn-sm btn-outline" id="btn-spec-toggle" onclick="toggleSpectrogram()">■ Stop</button>
+            </div>
           </div>
           <div class="spec-panel show" id="spec-panel">
             <div class="spec-toolbar">
@@ -1834,6 +1837,9 @@ const _spec = {
   audioCtx: null,
   analyser: null,
   stream: null,
+  source: null,
+  monitorGain: null,
+  monitoring: false,
   imageData: null,
 };
 
@@ -1953,7 +1959,10 @@ async function _startSpectrogram() {
     _spec.analyser = _spec.audioCtx.createAnalyser();
     _spec.analyser.fftSize = 4096;          // 2048 bins → good freq resolution
     _spec.analyser.smoothingTimeConstant = 0.4;
-    _spec.audioCtx.createMediaStreamSource(_spec.stream).connect(_spec.analyser);
+    _spec.source = _spec.audioCtx.createMediaStreamSource(_spec.stream);
+    _spec.source.connect(_spec.analyser);
+    _spec.monitorGain = null;
+    _spec.monitoring = false;
 
     const canvas = document.getElementById('spec-canvas');
     canvas.width = canvas.offsetWidth || 1200;
@@ -1975,9 +1984,34 @@ async function _startSpectrogram() {
 function _stopSpectrogram() {
   _spec.running = false;
   if (_spec.animFrame) cancelAnimationFrame(_spec.animFrame);
+  if (_spec.monitorGain) { _spec.monitorGain.disconnect(); _spec.monitorGain = null; }
   if (_spec.stream) _spec.stream.getTracks().forEach(t => t.stop());
   if (_spec.audioCtx) _spec.audioCtx.close();
-  _spec.analyser = _spec.audioCtx = _spec.stream = null;
+  _spec.analyser = _spec.audioCtx = _spec.stream = _spec.source = null;
+  _spec.monitoring = false;
+  const monBtn = document.getElementById('btn-spec-monitor');
+  if (monBtn) { monBtn.classList.remove('active'); monBtn.title = 'Listen in'; }
+}
+
+function toggleMonitor() {
+  if (!_spec.running || !_spec.source) {
+    toast('Start the spectrogram first', 'warn');
+    return;
+  }
+  if (_spec.monitoring) {
+    if (_spec.monitorGain) { _spec.monitorGain.disconnect(); _spec.monitorGain = null; }
+    _spec.monitoring = false;
+    const btn = document.getElementById('btn-spec-monitor');
+    if (btn) { btn.classList.remove('active'); btn.title = 'Listen in'; }
+  } else {
+    _spec.monitorGain = _spec.audioCtx.createGain();
+    _spec.monitorGain.gain.value = 1.0;
+    _spec.source.connect(_spec.monitorGain);
+    _spec.monitorGain.connect(_spec.audioCtx.destination);
+    _spec.monitoring = true;
+    const btn = document.getElementById('btn-spec-monitor');
+    if (btn) { btn.classList.add('active'); btn.title = 'Stop listening'; }
+  }
 }
 
 function _specDraw() {

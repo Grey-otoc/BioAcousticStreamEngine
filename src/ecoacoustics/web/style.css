@@ -126,6 +126,7 @@ main {
 .btn:active { transform: scale(0.97); }
 .btn-primary { background: var(--primary); color: #0d1a10; }
 .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+#btn-spec-monitor.active { background: color-mix(in srgb, var(--primary) 15%, transparent); border-color: var(--primary); box-shadow: 0 0 8px color-mix(in srgb, var(--primary) 40%, transparent); }
 .btn-danger { background: var(--danger); color: #fff; }
 .btn-sm { padding: 5px 10px; font-size: 0.78rem; }
 .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
