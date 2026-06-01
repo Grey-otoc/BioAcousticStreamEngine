@@ -723,6 +723,15 @@ async function init() {
     }
   } catch { /* storage unavailable */ }
 
+  // Auto-hide the explainer after 30 s so it doesn't linger on a kiosk screen
+  setTimeout(() => {
+    if (!document.body.classList.contains('explainer-hidden')) {
+      document.body.classList.add('explainer-hidden');
+      _resizeMain();
+      updateGridLayout();
+    }
+  }, 30000);
+
   _resizeMain();
   window.addEventListener('resize', () => { _resizeMain(); updateGridLayout(); });
 
