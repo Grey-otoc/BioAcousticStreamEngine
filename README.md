@@ -40,7 +40,7 @@ This project was born from a belief that technology can bring people closer to t
 - **Live MQTT streaming** — every detection published as JSON in real time; direct or bridge connection; configurable via web UI; each payload carries full site and monitoring-location coordinates
 - **Browser dashboard** — full web UI for live monitoring, schedule management, audio clips, reports, and settings; per-microphone schedule window and classifier tags
 - **Species gallery** — live photo grid that populates as species are detected; confidence filter, detection counts, CC attribution overlays; replace stock images with your own photographs via the built-in upload tool
-- **BASE Viewer** — a separate ambient display page (`/viewer/`) showing live species detections as a full-screen photo grid with sounds; suitable for kiosks, public screens, and Yodeck deployments; auto-expires entries older than 30 minutes and keeps detections from different sites on separate cards
+- **BASE Viewer** — a separate ambient display page (`/viewer/`) showing live species detections as a full-screen photo grid with sounds; suitable for kiosks, public screens, and Yodeck deployments; configurable detection retention (1 hour to unlimited, default 1 day); keeps detections from different sites on separate cards
 - **Extensible architecture** — insect and soil classifiers are structured and ready for model plug-ins
 
 ---
@@ -284,9 +284,9 @@ Upload up to 5 audio recordings per species (MP3, WAV, OGG). Each time that spec
 
 Stock images for 108 UK species are bundled. Replace any with your own photograph by clicking the card and uploading a JPEG, PNG, or WebP file. Photos are stored in the browser's IndexedDB and persist across sessions.
 
-### Auto-expiry
+### Detection retention
 
-Cards automatically disappear after **30 minutes of no new detections** for that species. A background sweep runs every 2 minutes. This keeps the display current — when recording stops, the gallery clears gradually rather than showing stale data indefinitely.
+Cards automatically disappear once a species hasn't been detected for longer than the configured retention period. Set via **⚙ Settings → Keep detections for** — options range from 1 hour to Unlimited, defaulting to **1 day**. A background sweep runs every 2 minutes and also runs immediately on page load to discard entries older than the current setting.
 
 ### Explainer panel
 

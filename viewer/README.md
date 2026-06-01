@@ -84,11 +84,22 @@ The threshold is remembered in `localStorage` across sessions. It can also be pr
 
 ---
 
-## Auto-expiry
+## Detection retention
 
-Cards are automatically removed after **30 minutes of no new detections** for that species. A background check runs every 2 minutes. This keeps the display current: when a recording session ends, the gallery gradually clears rather than showing stale species indefinitely.
+Cards are automatically removed once a species hasn't been detected for longer than the configured retention period. A background check runs every 2 minutes.
 
-When the page is reloaded, today's cached gallery is restored from `localStorage`. Any entries that have aged past 30 minutes are discarded immediately on load.
+The retention period is set in **⚙ Settings → Keep detections for**:
+
+| Option | Description |
+|---|---|
+| 1 hour | Short kiosk sessions or high-throughput sites |
+| 6 hours | Half-day monitoring window |
+| **1 day** | **Default** — cards persist through a full recording day |
+| 3 days | Multi-day deployments |
+| 7 days | Week-long field surveys |
+| Unlimited | Cards never expire automatically |
+
+The setting is saved in `localStorage`. When the page is reloaded, cached entries older than the current retention period are discarded immediately.
 
 ---
 
