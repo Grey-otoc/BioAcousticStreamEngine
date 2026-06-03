@@ -178,9 +178,6 @@ function connect() {
     mqttClient.subscribe(prefix + '/detections', err => {
       if (err) console.warn('Subscribe failed:', err.message);
     });
-    mqttClient.subscribe(prefix + '/locations', err => {
-      if (err) console.warn('Subscribe locations failed:', err.message);
-    });
   });
 
   mqttClient.on('message', (_topic, payload) => {
@@ -371,7 +368,7 @@ function purgeStaleGallery() {
 
 function _unlockAudioContext() {
   if (!audioCtx) {
-    const AC = window.AudioContext || window.webkitAudioContext;
+    const AC = window.AudioContext || (/** @type {any} */ (window)).webkitAudioContext;
     audioCtx = new AC();
   }
   if (audioCtx.state === 'suspended') audioCtx.resume();

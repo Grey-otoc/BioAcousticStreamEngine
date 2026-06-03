@@ -4,7 +4,9 @@ MQTT publisher — broadcasts every detection as a JSON message.
 Topics published:
   {prefix}/detections            — every detection regardless of classifier
   {prefix}/detections/{classifier} — e.g. bioacoustics/detections/bird
-  {prefix}/locations             — retained array of mic locations (on connect)
+
+Each detection payload is self-contained: site name/coords and monitoring
+location name/coords are embedded directly so no separate lookup is needed.
 
 Detection payload (JSON):
   {
@@ -91,12 +93,6 @@ class MqttPublisher:
         except Exception as exc:
             _log.warning("MQTT: could not connect to %s:%d — %s", host, port, exc)
 
-    def publish_locations(self) -> None:
-        """Publish mic locations to {prefix}/locations (retained)."""
-        payload = json.dumps({"mics": self._mics}, ensure_ascii=False)
-        self._client.publish(f"{self._prefix}/locations", payload, retain=True)
-        _log.info("MQTT: published %d mic location(s)", len(self._mics))
-
     def publish(self, det: Detection, session: Session, call_n: int) -> None:
         """Publish a single detection to the broker."""
         ts = datetime.datetime.fromtimestamp(det.timestamp)
@@ -134,7 +130,6 @@ class MqttPublisher:
     def _on_connect(self, client, userdata, flags, reason_code, properties) -> None:
         if str(reason_code) == "Success" or getattr(reason_code, "value", reason_code) == 0:
             _log.info("MQTT: connected")
-            self.publish_locations()
         else:
             _log.warning("MQTT: connection refused (reason %s)", reason_code)
 

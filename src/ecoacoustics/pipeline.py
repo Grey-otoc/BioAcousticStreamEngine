@@ -84,7 +84,7 @@ class Pipeline:
         mqtt_cfg = self._cfg.get("mqtt", {})
         loc_cfg = self._cfg.get("location", {})
 
-        # Build mic location list for the /locations broadcast.
+        # Build mic list for coord lookup when stamping detection payloads.
         # Prefer explicit mics[] list; fall back to single location: block.
         mics_cfg = self._cfg.get("mics") or []
         if not mics_cfg and loc_cfg.get("name"):
