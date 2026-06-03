@@ -23,6 +23,7 @@ import asyncio
 import datetime
 import json
 import logging
+import re
 import ssl
 from pathlib import Path
 
@@ -31,6 +32,10 @@ import yaml
 _log = logging.getLogger(__name__)
 
 HEARTBEAT_INTERVAL = 3600  # seconds
+
+
+def _slug(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", (name or "base").lower()).strip("_") or "base"
 
 
 def _publish_once(cfg: dict, secrets: dict) -> None:
@@ -63,10 +68,11 @@ def _publish_once(cfg: dict, secrets: dict) -> None:
     if username:
         client.username_pw_set(username, password)
 
+    site_slug = _slug(loc.get("name", "base"))
     client.connect(host, port, keepalive=10)
-    client.publish(f"{prefix}/status", payload, retain=True)
+    client.publish(f"{prefix}/status/{site_slug}", payload, retain=True)
     client.disconnect()
-    _log.info("Heartbeat → %s/status", prefix)
+    _log.info("Heartbeat → %s/status/%s", prefix, site_slug)
 
 
 def _load(config_path: str) -> tuple[dict, dict]:

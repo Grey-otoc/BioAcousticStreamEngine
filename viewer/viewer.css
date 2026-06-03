@@ -170,6 +170,55 @@ body {
 }
 .footer-divider { opacity: 0.4; }
 
+#device-status-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.9rem;
+  padding: 2px 7px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s;
+  line-height: 1.4;
+}
+#device-status-btn:hover { border-color: var(--border-hi); color: var(--primary); }
+#device-status-btn.has-stale { color: var(--warning); border-color: var(--warning); }
+
+#device-status-panel {
+  display: none;
+  position: fixed;
+  bottom: 44px;
+  right: 14px;
+  z-index: 160;
+  background: rgba(6,14,6,0.97);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  min-width: 220px;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.6);
+}
+#device-status-panel.open { display: block; }
+#device-status-list { display: flex; flex-direction: column; gap: 10px; }
+
+.hb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.80rem;
+}
+.hb-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.hb-dot.fresh  { background: var(--primary); box-shadow: 0 0 6px var(--primary-glow); }
+.hb-dot.recent { background: var(--warning); }
+.hb-dot.stale  { background: var(--danger); }
+.hb-site  { font-weight: 600; color: var(--text); flex: 1; }
+.hb-time  { color: var(--muted); font-size: 0.74rem; white-space: nowrap; }
+
 .explainer-close-btn {
   background: none;
   border: none;

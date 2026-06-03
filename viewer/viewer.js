@@ -20,7 +20,8 @@ const PLACEHOLDER = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
 
 // ── State ────────────────────────────────────────────────────────────────────
 
-const gallery   = {};   // entryId → entry  (keyed by species + site + location)
+const gallery    = {};   // entryId → entry  (keyed by species + site + location)
+const heartbeats = {};   // site_name → { site_name, timestamp, receivedAt }
 const imgCache  = {};   // speciesKey    → object URL (or PLACEHOLDER)
 let activeAudio   = 0;
 let soundEnabled  = true;
@@ -178,15 +179,20 @@ function connect() {
     mqttClient.subscribe(prefix + '/detections', err => {
       if (err) console.warn('Subscribe failed:', err.message);
     });
+    mqttClient.subscribe(prefix + '/status/+', err => {
+      if (err) console.warn('Subscribe status failed:', err.message);
+    });
   });
 
   mqttClient.on('message', (_topic, payload) => {
     try {
       const data = JSON.parse(payload.toString());
-      if (data.species_common) {
+      if (data.type === 'heartbeat' && data.site_name) {
+        heartbeats[data.site_name] = { ...data, receivedAt: Date.now() };
+        renderHeartbeats();
+      } else if (data.species_common) {
         updateGallery(data);
       }
-      // /locations messages (mics array) require no action in the viewer
     } catch { /* ignore malformed */ }
   });
 
@@ -680,6 +686,66 @@ function hideAbout() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+
+// ── Device heartbeat status ───────────────────────────────────────────────────
+
+function _timeAgo(ms) {
+  const secs = Math.floor((Date.now() - ms) / 1000);
+  if (secs < 120)  return 'just now';
+  if (secs < 3600) return `${Math.floor(secs / 60)} min ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)} hr ago`;
+  return `${Math.floor(secs / 86400)} days ago`;
+}
+
+function _hbDotClass(receivedAt) {
+  const hrs = (Date.now() - receivedAt) / 3600000;
+  if (hrs < 2)  return 'fresh';
+  if (hrs < 24) return 'recent';
+  return 'stale';
+}
+
+function renderHeartbeats() {
+  const list = document.getElementById('device-status-list');
+  const btn  = document.getElementById('device-status-btn');
+  if (!list) return;
+
+  const sites = Object.values(heartbeats);
+  if (!sites.length) {
+    list.innerHTML = '<em style="color:var(--muted);font-size:0.78rem">No heartbeats received yet</em>';
+    if (btn) btn.classList.remove('has-stale');
+    return;
+  }
+
+  const hasStale = sites.some(s => _hbDotClass(s.receivedAt) !== 'fresh');
+  if (btn) btn.classList.toggle('has-stale', hasStale);
+
+  list.innerHTML = sites
+    .sort((a, b) => b.receivedAt - a.receivedAt)
+    .map(s => `
+      <div class="hb-row">
+        <span class="hb-dot ${_hbDotClass(s.receivedAt)}"></span>
+        <span class="hb-site">${s.site_name}</span>
+        <span class="hb-time">${_timeAgo(s.receivedAt)}</span>
+      </div>`)
+    .join('');
+}
+
+function toggleDeviceStatus() {
+  const panel = document.getElementById('device-status-panel');
+  if (panel) panel.classList.toggle('open');
+}
+
+// Close panel when clicking outside
+document.addEventListener('click', e => {
+  const panel = document.getElementById('device-status-panel');
+  const btn   = document.getElementById('device-status-btn');
+  if (panel && panel.classList.contains('open') && !panel.contains(e.target) && e.target !== btn) {
+    panel.classList.remove('open');
+  }
+});
+
+// Refresh relative times every minute so "2 min ago" stays accurate
+setInterval(renderHeartbeats, 60000);
 
 async function init() {
   db = await openDb();

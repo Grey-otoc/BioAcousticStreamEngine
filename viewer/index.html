@@ -165,10 +165,16 @@
     </div>
   </div>
 
+  <!-- Device heartbeat status popover -->
+  <div id="device-status-panel">
+    <div id="device-status-list"><em style="color:var(--muted);font-size:0.78rem">No heartbeats received yet</em></div>
+  </div>
+
   <footer id="attribution-footer">
     <span>BioAcoustic Stream Engine (BASE)</span>
     <span class="footer-divider">·</span>
     <span>Blenheim Palace Innovation Team <span id="footer-year"></span></span>
+    <button id="device-status-btn" onclick="toggleDeviceStatus()" title="Device status">📡</button>
   </footer>
 
   <!-- Explainer overlay (mobile) -->
