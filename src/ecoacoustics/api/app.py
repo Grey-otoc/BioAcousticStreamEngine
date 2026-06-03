@@ -36,6 +36,7 @@ class NoCacheStaticFiles(StaticFiles):
 from ecoacoustics.api import state
 from ecoacoustics.api.pipeline_manager import PipelineManager
 from ecoacoustics.api.routes import clips, detections, devices, gallery, reports, schedule, settings, status
+from ecoacoustics.output.heartbeat import heartbeat_loop
 
 CONFIG_PATH = "config/settings.yaml"
 
@@ -63,8 +64,10 @@ async def lifespan(app: FastAPI):
     mgr = get_or_create_pipeline("default", device_index=None, device_name="Default")
     mgr.set_async_context(loop, _broadcast_queue)
     task = asyncio.create_task(_broadcast_loop())
+    hb_task = asyncio.create_task(heartbeat_loop(CONFIG_PATH))
     yield
     task.cancel()
+    hb_task.cancel()
 
 
 app = FastAPI(title="BioAcoustic Stream Engine (BASE)", lifespan=lifespan)

@@ -414,9 +414,25 @@ sudo systemctl enable --now mosquitto
 | `bioacoustics/detections/bee` | Bee detections only |
 | `bioacoustics/detections/insect` | Insect detections only |
 | `bioacoustics/detections/soil` | Soil acoustics detections only |
-| `bioacoustics/locations` | Retained — JSON array of monitoring-location mic positions |
+| `bioacoustics/status` | **Retained** — heartbeat published on startup and every hour; confirms the machine is alive even when no species are being detected |
 
 The topic prefix (`bioacoustics`) is configurable in `config/settings.yaml`.
+
+### Status / heartbeat payload
+
+Published to `bioacoustics/status` (retained) on startup and every hour:
+
+```json
+{
+  "type":           "heartbeat",
+  "timestamp":      "2026-06-03T10:00:00",
+  "site_name":      "Charlbury",
+  "site_latitude":  51.8403,
+  "site_longitude": -1.3625
+}
+```
+
+Because the message is retained, any subscriber that connects to the broker will immediately receive the last heartbeat — useful for confirming a remote station is alive without waiting up to an hour.
 
 ### Detection payload
 
