@@ -117,6 +117,13 @@ class MqttPublisher:
             "location_name": loc_name,
             "location_latitude": mic_info.get("latitude"),
             "location_longitude": mic_info.get("longitude"),
+            "temperature_c":      det.metadata.get("temperature_c"),
+            "humidity_pct":       det.metadata.get("humidity_pct"),
+            "wind_speed_kmh":     det.metadata.get("wind_speed_kmh"),
+            "wind_direction_deg": det.metadata.get("wind_direction_deg"),
+            "weather_code":       det.metadata.get("weather_code"),
+            "cloud_cover_pct":    det.metadata.get("cloud_cover_pct"),
+            "precipitation_mm":   det.metadata.get("precipitation_mm"),
         }
         message = json.dumps(payload)
         self._client.publish(f"{self._prefix}/detections", message)

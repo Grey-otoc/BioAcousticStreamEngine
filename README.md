@@ -455,7 +455,14 @@ Each detection message is a JSON object containing full site and monitoring-loca
   "site_longitude": -1.3625,
   "location_name": "Garden",
   "location_latitude": 51.8699,
-  "location_longitude": -1.4794
+  "location_longitude": -1.4794,
+  "temperature_c": 14.3,
+  "humidity_pct": 78,
+  "wind_speed_kmh": 12.4,
+  "wind_direction_deg": 245,
+  "weather_code": 2,
+  "cloud_cover_pct": 55,
+  "precipitation_mm": 0.0
 }
 ```
 
@@ -466,6 +473,15 @@ Each detection message is a JSON object containing full site and monitoring-loca
 | `location_name` | Name of the specific monitoring location (mic position) |
 | `location_latitude` / `location_longitude` | Coordinates of that mic position from the `mics:` list |
 | `species_image` | Pre-normalised image filename (e.g. `"robin.jpg"`) — ready to use without string manipulation |
+| `temperature_c` | Air temperature at time of detection (°C) |
+| `humidity_pct` | Relative humidity (%) |
+| `wind_speed_kmh` | Wind speed (km/h) |
+| `wind_direction_deg` | Wind direction (degrees, meteorological) |
+| `weather_code` | WMO weather interpretation code (0 = clear sky, 2–3 = partly/overcast, 45+ = fog/rain/snow) |
+| `cloud_cover_pct` | Total cloud cover (%) |
+| `precipitation_mm` | Precipitation in the last hour (mm) |
+
+Weather is fetched from [Open-Meteo](https://open-meteo.com/) (free, no API key) once per hour using the site's latitude/longitude. All weather fields are `null` if the fetch hasn't succeeded yet. Disable with `weather.enabled: false` in `config/settings.yaml`.
 
 `location_name` and its coordinates will be empty/null if no location has been assigned to the classifier in `classifiers.locations`.
 

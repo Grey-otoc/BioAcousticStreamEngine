@@ -37,11 +37,17 @@ _CLASSIFIER_COLOURS = {
     "soil": "cyan",
 }
 
+_WEATHER_FIELDS = [
+    "temperature_c", "humidity_pct", "wind_speed_kmh",
+    "wind_direction_deg", "weather_code", "cloud_cover_pct", "precipitation_mm",
+]
+
 _DETECTION_FIELDS = [
     "session_id", "window_name", "date", "time",
     "classifier", "species_common", "species_scientific",
     "confidence", "call_number_in_session",
     "location_name", "latitude", "longitude",
+    *_WEATHER_FIELDS,
 ]
 
 _SESSION_FIELDS = [
@@ -163,6 +169,7 @@ class DetectionLogger:
             "location_name": self._location_name,
             "latitude": self._lat or "",
             "longitude": self._lon or "",
+            **{k: det.metadata.get(k, "") for k in _WEATHER_FIELDS},
         })
         self._det_file.flush()
 

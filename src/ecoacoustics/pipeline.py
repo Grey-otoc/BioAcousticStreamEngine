@@ -39,6 +39,7 @@ from ecoacoustics.output.logger import DetectionLogger
 from ecoacoustics.output.mqtt_publisher import MqttPublisher
 from ecoacoustics.session import Session
 from ecoacoustics.watchdog import Watchdog
+from ecoacoustics.weather import WeatherCache
 
 _console = Console()
 _log = logging.getLogger(__name__)
@@ -126,6 +127,13 @@ class Pipeline:
             species_db_path=clips_cfg.get("species_db", "output/known_species.json"),
             max_clips_per_species=clips_cfg.get("max_per_species", 100),
             min_confidence=out_cfg.get("min_confidence", 0.35),
+        )
+
+        weather_cfg = self._cfg.get("weather", {})
+        self._weather = WeatherCache(
+            lat=loc_cfg.get("latitude", bird_cfg.get("latitude", 0.0)),
+            lon=loc_cfg.get("longitude", bird_cfg.get("longitude", 0.0)),
+            enabled=weather_cfg.get("enabled", True),
         )
 
         self._stop_event = threading.Event()
@@ -263,7 +271,8 @@ class Pipeline:
         return session
 
     def close(self) -> None:
-        """Flush and close the CSV log files."""
+        """Flush and close the CSV log files and stop background tasks."""
+        self._weather.stop()
         self._logger.close()
 
     # ------------------------------------------------------------------
@@ -350,9 +359,11 @@ class Pipeline:
                     self._last_detection_time[clf.name] = time.time()
 
                 mic_loc = self._clf_locations.get(clf.name, "")
-                if mic_loc:
-                    for det in detections:
+                weather = self._weather.get()
+                for det in detections:
+                    if mic_loc:
                         det.metadata.setdefault("mic_name", mic_loc)
+                    det.metadata.update(weather)
 
                 self._logger.log(detections, session)
 
