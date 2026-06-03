@@ -299,6 +299,25 @@ function renderGallery(flashName) {
   }
 }
 
+// ── Weather icons + strip ─────────────────────────────────────────────────────
+
+const _WX = {
+  temp:     `<svg width="9" height="13" viewBox="0 0 9 13" fill="currentColor"><rect x="3" y="0" width="3" height="7.5" rx="1.5"/><rect x="3" y="6" width="3" height="3"/><circle cx="4.5" cy="10.5" r="2.5"/></svg>`,
+  wind:     `<svg width="14" height="10" viewBox="0 0 14 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1 3h8a2 2 0 0 0 0-4"/><path d="M1 7h10a2 2 0 0 1 0 4"/></svg>`,
+  humidity: `<svg width="9" height="12" viewBox="0 0 9 12" fill="currentColor"><path d="M4.5 0C3 3 0 6 0 8.5a4.5 4.5 0 0 0 9 0C9 6 6 3 4.5 0z"/></svg>`,
+  rain:     `<svg width="10" height="13" viewBox="0 0 10 13" fill="currentColor"><path d="M5 0C3.5 3 0 6 0 8.5a5 5 0 0 0 10 0C10 6 6.5 3 5 0z" opacity="0.65"/><line x1="2" y1="11" x2="1" y2="13" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="5" y1="11.5" x2="4" y2="13.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="8" y1="11" x2="7" y2="13" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>`,
+};
+
+function _weatherStrip(det) {
+  if (det.temperature_c === null || det.temperature_c === undefined) return '';
+  const parts = [];
+  if (det.temperature_c  != null) parts.push(`<span class="wx-item">${_WX.temp}${det.temperature_c.toFixed(1)}°C</span>`);
+  if (det.wind_speed_kmh != null) parts.push(`<span class="wx-item">${_WX.wind}${(det.wind_speed_kmh * 0.621371).toFixed(1)}mph</span>`);
+  if (det.humidity_pct   != null) parts.push(`<span class="wx-item">${_WX.humidity}${Math.round(det.humidity_pct)}%</span>`);
+  if (det.precipitation_mm > 0)   parts.push(`<span class="wx-item">${_WX.rain}${det.precipitation_mm}mm</span>`);
+  return parts.length ? `<div class="weather-strip">${parts.join('')}</div>` : '';
+}
+
 function galleryCard(entry) {
   const { det, key, entryId, count, bestConf, firstSeen, lastSeen } = entry;
   const pct = Math.round(bestConf * 100);
@@ -325,6 +344,7 @@ function galleryCard(entry) {
           <span title="First detected">⬆ ${_fmtSeen(firstSeen?.date, firstSeen?.time)}</span>
           <span title="Last detected">⬇ ${_fmtSeen(lastSeen?.date,  lastSeen?.time)}</span>
         </div>
+        ${_weatherStrip(det)}
       </div>
     </div>`;
 }

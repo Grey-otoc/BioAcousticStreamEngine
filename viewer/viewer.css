@@ -586,6 +586,23 @@ body.explainer-hidden #explainer-btn   { display: flex; }
   padding-top: 6px;
   border-top: 1px solid rgba(50,100,50,0.25);
 }
+.weather-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(50,100,50,0.20);
+}
+.wx-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.62rem;
+  color: rgba(255,255,255,0.55);
+  white-space: nowrap;
+}
+.wx-item svg { opacity: 0.8; flex-shrink: 0; color: rgba(255,255,255,0.70); }
 
 /* ── Overlay panels ── */
 
