@@ -299,6 +299,20 @@ function renderGallery(flashName) {
   }
 }
 
+// ── Icon set — simple white SVGs, consistent across all platforms ─────────────
+
+const _ICONS = {
+  soundOn:  `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 6.5h2l3.5-2.5v8L5 9.5H3a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5z"/><path d="M10.5 5.5a3.5 3.5 0 0 1 0 5m2-7a6.5 6.5 0 0 1 0 9" stroke="currentColor" fill="none" stroke-width="1.3" stroke-linecap="round"/></svg>`,
+  soundOff: `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 6.5h2l3.5-2.5v8L5 9.5H3a.5.5 0 0 1-.5-.5V7a.5.5 0 0 1 .5-.5z"/><line x1="11" y1="6" x2="15" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/><line x1="15" y1="6" x2="11" y2="10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>`,
+  info:     `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><line x1="8" y1="7.5" x2="8" y2="11"/><circle cx="8" cy="5.5" r=".6" fill="currentColor" stroke="none"/></svg>`,
+  leaf:     `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M13.5 1.5c0 5.5-2 8.5-5 10.5a7 7 0 0 1-5.5-1c1-3 3-5 10.5-9.5z"/><path d="M3.5 13l2-2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" fill="none"/></svg>`,
+  settings: `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M3.5 12.5l1.3-1.3M11.2 4.8l1.3-1.3"/></svg>`,
+  signal:   `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="13" r=".8" fill="currentColor" stroke="none"/><path d="M5 10.5a4.2 4.2 0 0 1 6 0"/><path d="M2.5 8a8 8 0 0 1 11 0"/></svg>`,
+  pin:      `<svg width="10" height="13" viewBox="0 0 10 13" fill="currentColor" aria-hidden="true"><path d="M5 0a4 4 0 0 0-4 4c0 3 4 9 4 9s4-6 4-9a4 4 0 0 0-4-4zm0 5.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/></svg>`,
+  arrowUp:  `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8V2M2 5l3-3 3 3"/></svg>`,
+  arrowDn:  `<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 2v6M2 5l3 3 3-3"/></svg>`,
+};
+
 // ── Weather icons + strip ─────────────────────────────────────────────────────
 
 const _WX = {
@@ -338,11 +352,11 @@ function galleryCard(entry) {
         <div class="card-sci">${det.species_scientific || ''}</div>
         <div class="card-meta-row">
           ${det.classifier ? `<span class="card-clf">${det.classifier}</span>` : ''}
-          ${locDisplay ? `<span class="card-loc-badge">📍 ${locDisplay}</span>` : ''}
+          ${locDisplay ? `<span class="card-loc-badge">${_ICONS.pin} ${locDisplay}</span>` : ''}
         </div>
         <div class="card-times">
-          <span title="First detected">⬆ ${_fmtSeen(firstSeen?.date, firstSeen?.time)}</span>
-          <span title="Last detected">⬇ ${_fmtSeen(lastSeen?.date,  lastSeen?.time)}</span>
+          <span title="First detected">${_ICONS.arrowUp} ${_fmtSeen(firstSeen?.date, firstSeen?.time)}</span>
+          <span title="Last detected">${_ICONS.arrowDn} ${_fmtSeen(lastSeen?.date,  lastSeen?.time)}</span>
         </div>
         ${_weatherStrip(det)}
       </div>
@@ -416,11 +430,11 @@ function _updateSoundBtn() {
   const btn = document.getElementById('sound-unlock-btn');
   if (!btn) return;
   if (soundEnabled) {
-    btn.textContent = '🔊';
+    btn.innerHTML = _ICONS.soundOn;
     btn.title = 'Sounds on';
     btn.classList.add('sound-on');
   } else {
-    btn.textContent = '🔇';
+    btn.innerHTML = _ICONS.soundOff;
     btn.title = 'Sounds off';
     btn.classList.remove('sound-on');
   }
