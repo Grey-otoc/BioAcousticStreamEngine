@@ -1,0 +1,19 @@
+{
+  "name": "BASE Viewer — BioAcoustic Stream Engine",
+  "short_name": "BASE",
+  "description": "Live species detection viewer. Listen. Analyse. Protect.",
+  "start_url": "/viewer/",
+  "scope": "/viewer/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#060d06",
+  "background_color": "#060d06",
+  "categories": ["nature", "science", "utilities"],
+  "icons": [
+    { "src": "assets/icons/icon-16.png",  "sizes": "16x16",   "type": "image/png" },
+    { "src": "assets/icons/icon-32.png",  "sizes": "32x32",   "type": "image/png" },
+    { "src": "assets/icons/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
