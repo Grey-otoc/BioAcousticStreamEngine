@@ -42,7 +42,7 @@ function defaultSettings() {
     username:           '',
     password:           '',
     autoConnect:        false,
-    galleryRetainHours: 24,
+    galleryRetainHours: 168,
   };
 }
 
