@@ -44,6 +44,10 @@ body {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 10px 20px;
+  /* Push content below iOS status bar / Dynamic Island */
+  padding-top: max(10px, env(safe-area-inset-top));
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
   gap: 12px;
   box-shadow: 0 2px 20px rgba(0,0,0,0.5);
 }
@@ -161,6 +165,10 @@ body {
   justify-content: center;
   gap: 8px;
   padding: 7px 20px;
+  /* Account for iOS home indicator */
+  padding-bottom: max(7px, env(safe-area-inset-bottom));
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--muted);
