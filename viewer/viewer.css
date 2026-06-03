@@ -45,11 +45,24 @@ body {
   align-items: center;
   padding: 10px 20px;
   /* Push content below iOS status bar / Dynamic Island */
-  padding-top: max(10px, env(safe-area-inset-top));
-  padding-left: max(20px, env(safe-area-inset-left));
-  padding-right: max(20px, env(safe-area-inset-right));
+  padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
+  padding-left: calc(env(safe-area-inset-left, 0px) + 20px);
+  padding-right: calc(env(safe-area-inset-right, 0px) + 20px);
   gap: 12px;
   box-shadow: 0 2px 20px rgba(0,0,0,0.5);
+}
+
+/* Fill the status-bar area with the header background colour */
+#header::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: rgba(6,12,6,0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 101;
+  pointer-events: none;
 }
 
 .logo-base   { font-weight: 800; font-size: 1.05rem; letter-spacing: 0.10em; color: var(--primary); text-shadow: 0 0 16px var(--primary-glow); }
@@ -166,9 +179,9 @@ body {
   gap: 8px;
   padding: 7px 20px;
   /* Account for iOS home indicator */
-  padding-bottom: max(7px, env(safe-area-inset-bottom));
-  padding-left: max(20px, env(safe-area-inset-left));
-  padding-right: max(20px, env(safe-area-inset-right));
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 7px);
+  padding-left: calc(env(safe-area-inset-left, 0px) + 20px);
+  padding-right: calc(env(safe-area-inset-right, 0px) + 20px);
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--muted);
