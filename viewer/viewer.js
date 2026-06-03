@@ -658,6 +658,8 @@ function _resizeMain() {
   const isDesktop  = window.innerWidth > 600 && window.innerHeight > 500;
   const explainerH = (isDesktop && !document.body.classList.contains('explainer-hidden'))
     ? (explainer?.offsetHeight || 0) : 0;
+  // Push main below the sticky header which itself is offset by the safe area bar
+  main.style.marginTop = safeTop + 'px';
   const h = window.innerHeight - safeTop - header.offsetHeight - footerH - explainerH;
   main.style.height    = Math.max(180, h) + 'px';
   main.style.overflowY = 'auto';
