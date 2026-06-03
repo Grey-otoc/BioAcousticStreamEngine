@@ -151,8 +151,18 @@ class Pipeline:
         self._processors: dict[str, AudioProcessor] = {}
 
         clf_devices = self._cfg.get("classifiers", {}).get("devices", {})
-        # Optional per-classifier monitoring location name (e.g. "Garden") shown on detection cards.
-        self._clf_locations: dict[str, str] = self._cfg.get("classifiers", {}).get("locations", {})
+
+        # Build classifier → monitoring location map.
+        # Explicit classifiers.locations entries always win.
+        # When there is exactly one mic configured and no explicit entry for a
+        # classifier, fall back to that mic so single-mic setups need no extra config.
+        _explicit_locs = self._cfg.get("classifiers", {}).get("locations", {})
+        _mics = self._cfg.get("mics") or []
+        _single_mic = _mics[0].get("name", "") if len(_mics) == 1 else ""
+        self._clf_locations: dict[str, str] = {
+            clf.name: _explicit_locs.get(clf.name) or _single_mic
+            for clf in self._classifiers
+        }
         default_device = self._cfg["audio"].get("device")
         max_queue_size = self._cfg["audio"].get("max_queue_size", 20)
 
