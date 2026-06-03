@@ -650,13 +650,15 @@ function _resizeMain() {
   const header    = document.getElementById('header');
   const footer    = document.getElementById('attribution-footer');
   const explainer = document.getElementById('explainer-tile');
+  const safeBar   = document.getElementById('safe-area-bar');
   if (!main || !header) return;
 
+  const safeTop    = safeBar ? safeBar.offsetHeight : 0;  // env(safe-area-inset-top) via element
   const footerH    = footer ? footer.offsetHeight : 0;
   const isDesktop  = window.innerWidth > 600 && window.innerHeight > 500;
   const explainerH = (isDesktop && !document.body.classList.contains('explainer-hidden'))
     ? (explainer?.offsetHeight || 0) : 0;
-  const h = window.innerHeight - header.offsetHeight - footerH - explainerH;
+  const h = window.innerHeight - safeTop - header.offsetHeight - footerH - explainerH;
   main.style.height    = Math.max(180, h) + 'px';
   main.style.overflowY = 'auto';
 }

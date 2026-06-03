@@ -44,24 +44,24 @@ body {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   padding: 10px 20px;
-  /* Push content below iOS status bar / Dynamic Island */
-  padding-top: calc(env(safe-area-inset-top, 0px) + 10px);
   padding-left: calc(env(safe-area-inset-left, 0px) + 20px);
   padding-right: calc(env(safe-area-inset-right, 0px) + 20px);
+  /* Stick below the status bar / Dynamic Island, not behind it */
+  top: env(safe-area-inset-top, 0px);
   gap: 12px;
   box-shadow: 0 2px 20px rgba(0,0,0,0.5);
 }
 
-/* Fill the status-bar area with the header background colour */
-#header::before {
-  content: '';
+/* Fills the iOS status-bar / Dynamic Island area with the header colour.
+   Its offsetHeight is read by _resizeMain() to get the safe-area value in JS. */
+#safe-area-bar {
   position: fixed;
   top: 0; left: 0; right: 0;
   height: env(safe-area-inset-top, 0px);
   background: rgba(6,12,6,0.94);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  z-index: 101;
+  z-index: 200;
   pointer-events: none;
 }
 
