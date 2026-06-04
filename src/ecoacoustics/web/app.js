@@ -332,9 +332,14 @@ async function refreshDevicePanel() {
     // Build reverse map: PipeWire source name → active classifiers assigned to it
     const clfActive = new Set(clfData.active || []);
     const deviceClfMap = {};
+    const defaultClfs = [];
     for (const [clf, devName] of Object.entries(clfData.devices || {})) {
-      if (!devName || !clfActive.has(clf)) continue;
-      (deviceClfMap[devName] = deviceClfMap[devName] || []).push(clf);
+      if (!clfActive.has(clf)) continue;
+      if (devName) (deviceClfMap[devName] = deviceClfMap[devName] || []).push(clf);
+      else defaultClfs.push(clf);
+    }
+    for (const clf of clfActive) {
+      if (!(clf in (clfData.devices || {}))) defaultClfs.push(clf);
     }
 
     if (!devData.devices.length) {
@@ -356,7 +361,10 @@ async function refreshDevicePanel() {
                      : d.state === 'SUSPENDED' ? '<span style="color:var(--muted)">○ suspended</span>'
                      : '';
       const assignedLoc = deviceLocs[key] || '';
-      const clfTags = (deviceClfMap[d.name] || []).map(clf => {
+      const clfList = d.is_default
+        ? [...(deviceClfMap[d.name] || []), ...defaultClfs]
+        : (deviceClfMap[d.name] || []);
+      const clfTags = clfList.map(clf => {
         const meta = CLASSIFIERS.find(c => c.key === clf);
         return meta ? `<span class="clf-tag clf-${clf}">${meta.icon} ${meta.label}</span>` : '';
       }).join('');
@@ -1497,6 +1505,15 @@ async function renderSettings() {
         <button class="btn btn-outline btn-sm" id="btn-add-mic">+ Add location</button>
       </div>
     </div>
+
+    <div class="card">
+      <div class="card-title">Classifier Monitoring Locations</div>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">
+        Which monitoring location each classifier listens from. This name appears on every detection card and in the MQTT payload.
+      </p>
+      <div id="clf-loc-rows" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
+      <button class="btn btn-primary btn-sm" onclick="saveClfLocs()">Save</button>
+    </div>
   `;
 
   // Load location
@@ -1525,6 +1542,16 @@ async function renderSettings() {
   try {
     renderMicsRows(await api.get('/api/settings/mics'));
   } catch { renderMicsRows([]); }
+
+  // Load classifier → monitoring location mapping
+  try {
+    const [clfData, micsData, clfLocs] = await Promise.all([
+      api.get('/api/settings/classifiers').catch(() => ({ active: [], devices: {} })),
+      api.get('/api/settings/mics').catch(() => []),
+      api.get('/api/settings/classifier_locations').catch(() => ({})),
+    ]);
+    renderClfLocRows(clfData.active || [], micsData, clfLocs);
+  } catch { /* non-fatal */ }
 
   document.getElementById('mqtt-mode').addEventListener('change', e => _mqttModeChanged(e.target.value));
   document.getElementById('btn-save-location').addEventListener('click', saveLocation);
@@ -1669,6 +1696,43 @@ async function confirmAddMic() {
     toast(`Could not add: ${err.message}`, 'error', 5000);
   } finally {
     btnDone(btn);
+  }
+}
+
+function renderClfLocRows(activeClfs, mics, currentLocs) {
+  const el = document.getElementById('clf-loc-rows');
+  if (!el) return;
+  if (!activeClfs.length) {
+    el.innerHTML = '<p style="font-size:0.82rem;color:var(--muted)">No active classifiers configured.</p>';
+    return;
+  }
+  const micOptions = ['<option value="">— none —</option>',
+    ...mics.map(m => `<option value="${escHtml(m.name)}">${escHtml(m.name)}</option>`)
+  ].join('');
+  const clfMeta = { bird:'🐦 Birds', bat:'🦇 Bats', bee:'🐝 Bees', insect:'🦗 Insects', soil:'🌱 Soil' };
+  el.innerHTML = activeClfs.map(clf => {
+    const cur = currentLocs[clf] || '';
+    const opts = micOptions.replace(`value="${escHtml(cur)}"`, `value="${escHtml(cur)}" selected`);
+    return `
+      <div style="display:flex;align-items:center;gap:12px">
+        <label for="clf-loc-${clf}" style="font-size:0.82rem;color:var(--muted);white-space:nowrap;width:100px">${clfMeta[clf] || clf}</label>
+        <select id="clf-loc-${clf}" style="flex:1;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:0.82rem">${opts}</select>
+      </div>`;
+  }).join('');
+}
+
+async function saveClfLocs() {
+  const rows = document.querySelectorAll('[id^="clf-loc-"]');
+  const body = {};
+  rows.forEach(sel => {
+    const clf = sel.id.replace('clf-loc-', '');
+    if (sel.value) body[clf] = sel.value;
+  });
+  try {
+    await api.post('/api/settings/classifier_locations', body);
+    toast('Classifier locations saved', 'success', 3000);
+  } catch (err) {
+    toast(err.message, 'error', 5000);
   }
 }
 
