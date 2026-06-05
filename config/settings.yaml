@@ -5,10 +5,10 @@ audio:
   gain_db: 6.0
   max_queue_size: 20
 bat:
-  capture_rate: 256000
-  min_class_confidence: 0.4
-  min_det_confidence: 0.5
-  silence_threshold: 0.0001
+  capture_rate: 384000
+  min_class_confidence: 0.6
+  min_det_confidence: 0.75
+  silence_threshold: 0.002
 bee:
   include_trill: false
   logit_threshold: -1.45
@@ -43,7 +43,11 @@ insect:
 location:
   latitude: 51.8403
   longitude: -1.3625
-  name: Weaveley Solar
+  name: Weaveley
+mics:
+- latitude: 51.858137
+  longitude: -1.339382
+  name: South Control
 mqtt:
   enabled: true
   host: u1d78101.ala.eu-central-1.emqxsl.com

@@ -69,14 +69,12 @@ class MqttPublisher:
         longitude: float | None = None,
         location_name: str | None = None,
         mics: list | None = None,
-        classifier_locations: dict | None = None,
     ):
         self._prefix = topic_prefix.rstrip("/")
         self._lat = latitude
         self._lon = longitude
         self._location_name = location_name or ""
         self._mics = mics or []
-        self._classifier_locations = classifier_locations or {}
 
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._client.on_connect = self._on_connect

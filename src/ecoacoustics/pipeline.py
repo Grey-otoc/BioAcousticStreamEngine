@@ -108,7 +108,6 @@ class Pipeline:
                 longitude=loc_cfg.get("longitude", bird_cfg.get("longitude")),
                 location_name=loc_cfg.get("name", ""),
                 mics=mics_cfg,
-                classifier_locations=self._cfg.get("classifiers", {}).get("locations", {}),
             )
 
         self._logger = DetectionLogger(
@@ -152,17 +151,11 @@ class Pipeline:
 
         clf_devices = self._cfg.get("classifiers", {}).get("devices", {})
 
-        # Build classifier → monitoring location map.
-        # Explicit classifiers.locations entries always win.
-        # When there is exactly one mic configured and no explicit entry for a
-        # classifier, fall back to that mic so single-mic setups need no extra config.
-        _explicit_locs = self._cfg.get("classifiers", {}).get("locations", {})
+        # Auto-derive monitoring location: use the single configured mic name if there is
+        # exactly one, otherwise leave blank (multi-mic setups stamp location via device).
         _mics = self._cfg.get("mics") or []
-        _single_mic = _mics[0].get("name", "") if len(_mics) == 1 else ""
-        self._clf_locations: dict[str, str] = {
-            clf.name: _explicit_locs.get(clf.name) or _single_mic
-            for clf in self._classifiers
-        }
+        self._mic_location: str = _mics[0].get("name", "") if len(_mics) == 1 else ""
+
         default_device = self._cfg["audio"].get("device")
         max_queue_size = self._cfg["audio"].get("max_queue_size", 20)
 
@@ -368,7 +361,7 @@ class Pipeline:
                 with self._detection_time_lock:
                     self._last_detection_time[clf.name] = time.time()
 
-                mic_loc = self._clf_locations.get(clf.name, "")
+                mic_loc = self._mic_location
                 weather = self._weather.get()
                 for det in detections:
                     if mic_loc:
