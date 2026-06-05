@@ -1959,9 +1959,7 @@ async function toggleSpectrogram() {
 
 async function _startSpectrogram() {
   const deviceId = document.getElementById('spec-device')?.value || null;
-  // Use 'ideal' rather than 'exact' — PipeWire/pactl source names work with ideal
-  // but may fail with exact if the browser maps them differently
-  const constraints = { audio: deviceId ? { deviceId: { ideal: deviceId } } : true, video: false };
+  const constraints = { audio: deviceId ? { deviceId: { exact: deviceId } } : true, video: false };
   try {
     _spec.stream = await navigator.mediaDevices.getUserMedia(constraints);
     _spec.audioCtx = new AudioContext();

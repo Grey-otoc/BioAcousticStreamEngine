@@ -293,7 +293,7 @@ class PipelineManager:
             "call_number_in_session": call_n,
             "device_name": self._device_name,
             "device_index": self._device_index,
-            "location_name": location_name,
+            "site_name": location_name,
         }
         try:
             asyncio.run_coroutine_threadsafe(
