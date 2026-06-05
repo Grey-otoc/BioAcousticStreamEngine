@@ -27,10 +27,14 @@ from ecoacoustics.session import Session
 class PipelineManager:
     """Manages start/stop of the Pipeline from the web API."""
 
-    def __init__(self, config_path: str = "config/settings.yaml", device_index=None, device_name: str = "Default"):
+    def __init__(self, config_path: str = "config/settings.yaml", device_index=None,
+                 device_name: str = "Default", config_override: Optional[dict] = None,
+                 mic_name: str = ""):
         self._config_path = config_path
         self._device_index = device_index
         self._device_name = device_name
+        self._config_override = config_override or {}
+        self._mic_name = mic_name  # monitoring location name for this pipeline
         self._pipeline = None
         self._thread: Optional[threading.Thread] = None
         self._state = "idle"          # idle | listening | scheduled
@@ -155,8 +159,10 @@ class PipelineManager:
                     detection_callback=self._on_detection,
                     level_callback=self._on_level,
                     device_override=self._device_index,
+                    config_override=self._config_override or None,
                 )
-                self._start_config_watcher(self._pipeline, cfg)
+                if not self._config_override:
+                    self._start_config_watcher(self._pipeline, cfg)
                 try:
                     self._pipeline.run(window_name="manual", duration_seconds=remaining)
                 finally:
@@ -204,8 +210,10 @@ class PipelineManager:
                             detection_callback=self._on_detection,
                             level_callback=self._on_level,
                             device_override=self._device_index,
+                            config_override=self._config_override or None,
                         )
-                        self._start_config_watcher(self._pipeline, cfg)
+                        if not self._config_override:
+                            self._start_config_watcher(self._pipeline, cfg)
                         try:
                             session = self._pipeline.run(
                                 window_name=name, duration_seconds=remaining
@@ -294,7 +302,7 @@ class PipelineManager:
             "device_name": self._device_name,
             "device_index": self._device_index,
             "site_name": location_name,
-            "location_name": det.metadata.get("mic_name", ""),
+            "location_name": det.metadata.get("mic_name", "") or self._mic_name,
         }
         try:
             asyncio.run_coroutine_threadsafe(

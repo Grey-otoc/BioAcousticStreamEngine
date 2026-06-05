@@ -9,7 +9,8 @@ from pydantic import BaseModel
 
 router = APIRouter()
 _SETTINGS = Path("config/settings.yaml")
-_SECRETS = Path("config/secrets.yaml")
+_SECRETS  = Path("config/secrets.yaml")
+_AUTOSTART = Path("config/autostart.yaml")
 
 
 def _load_secrets() -> dict:
@@ -36,6 +37,9 @@ class MicModel(BaseModel):
     name: str
     latitude: float
     longitude: float
+    device: Optional[str] = None          # PipeWire source name
+    classifiers: Optional[list[str]] = None  # classifiers active on this mic
+    schedule: str = "auto"                # auto | manual
 
 
 class ClassifierDevicesModel(BaseModel):
@@ -226,6 +230,25 @@ def delete_mic(index: int):
     return {"updated": True, "mics": mics}
 
 
+@router.patch("/settings/mics/{index}")
+def update_mic(index: int, body: dict):
+    """Update device, classifiers, or schedule on an existing mic entry."""
+    with open(_SETTINGS) as f:
+        cfg = yaml.safe_load(f)
+    mics = cfg.get("mics") or []
+    if index < 0 or index >= len(mics):
+        from fastapi import HTTPException
+        raise HTTPException(404, f"Mic index {index} out of range")
+    allowed = {"device", "classifiers", "schedule"}
+    for k, v in body.items():
+        if k in allowed:
+            mics[index][k] = v
+    cfg["mics"] = mics
+    with open(_SETTINGS, "w") as f:
+        yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+    return {"updated": True, "mic": mics[index]}
+
+
 @router.get("/settings/classifiers")
 def get_classifiers():
     with open(_SETTINGS) as f:
@@ -250,4 +273,19 @@ def set_classifiers(body: ClassifierDevicesModel):
     cfg["classifiers"].pop("locations", None)  # removed feature — purge stale key
     with open(_SETTINGS, "w") as f:
         yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+    return {"updated": True}
+
+
+@router.get("/settings/autostart")
+def get_autostart():
+    if _AUTOSTART.exists():
+        with open(_AUTOSTART) as f:
+            return yaml.safe_load(f) or {"enabled": False}
+    return {"enabled": False}
+
+
+@router.post("/settings/autostart")
+def set_autostart(body: dict):
+    with open(_AUTOSTART, "w") as f:
+        yaml.dump({"enabled": bool(body.get("enabled", False))}, f)
     return {"updated": True}

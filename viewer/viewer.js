@@ -352,7 +352,7 @@ function _weatherStrip(det) {
 function galleryCard(entry) {
   const { det, key, entryId, count, bestConf, firstSeen, lastSeen } = entry;
   const pct = Math.round(bestConf * 100);
-  const locDisplay = det.location_name || det.site_name || '';
+  const locDisplay = [det.site_name, det.location_name].filter(Boolean).join(' · ');
 
   return `
     <div class="gallery-card" id="card-${entryId}" onclick="showSpeciesDetail('${entryId.replace(/'/g, "\\'")}')">
@@ -586,7 +586,7 @@ async function _renderModalBody(entryId, key, entry) {
   const sounds = await dbGet('sounds', key);
   const clips  = sounds?.clips || [];
   const hasImg = imgCache[key] && imgCache[key] !== PLACEHOLDER;
-  const locDisplay = det.location_name || det.site_name || '';
+  const locDisplay = [det.site_name, det.location_name].filter(Boolean).join(' · ');
   const safeEid = entryId.replace(/'/g, "\\'");
 
   const soundItems = clips.map((c, i) => `

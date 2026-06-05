@@ -863,23 +863,19 @@ async function renderSchedule() {
       </div>
     </div>
     <div class="card">
-      <div class="card-title">Classifiers & Microphones ${helpBtn('classifiers')}</div>
+      <div class="card-title">Recording Locations ${helpBtn('classifiers')}</div>
       <p style="font-size:0.82rem;color:var(--muted);margin-bottom:14px">
-        Select which classifiers are active and which microphone each one uses.
-        Changes apply when the next listening session starts.
+        For each monitoring location, choose which microphone to record from and which species to detect.
+        Add locations under Settings → Monitoring Locations first.
       </p>
-      <div id="classifier-device-panel"><div class="empty">Loading...</div></div>
-      <div style="margin-top:14px">
-        <button class="btn btn-primary" id="btn-save-classifiers">Save</button>
-      </div>
+      <div id="mic-clf-panel"><div class="empty">Loading...</div></div>
     </div>
   `;
   document.getElementById('w-anchor').addEventListener('change', e =>
     document.getElementById('fixed-time-group').style.display = e.target.value === 'fixed' ? '' : 'none'
   );
   document.getElementById('btn-add-window').addEventListener('click', addWindow);
-  document.getElementById('btn-save-classifiers').addEventListener('click', saveClassifiers);
-  await Promise.all([loadSchedule(), loadClassifierDevices()]);
+  await Promise.all([loadSchedule(), loadMicClfPanel()]);
 }
 
 const _CLF_META = {
@@ -958,6 +954,178 @@ async function saveClassifiers() {
   } catch (err) {
     toast(err.message, 'error', 6000);
   } finally { if (btn) btnDone(btn); }
+}
+
+async function loadMicClfPanel() {
+  const panel = document.getElementById('mic-clf-panel');
+  if (!panel) return;
+  try {
+    const [mics, devData, status] = await Promise.all([
+      api.get('/api/settings/mics').catch(() => []),
+      api.get('/api/devices').catch(() => ({ devices: [] })),
+      api.get('/api/status').catch(() => ({ pipelines: {} })),
+    ]);
+
+    if (!mics.length) {
+      panel.innerHTML = '<div class="empty">No monitoring locations configured yet — add them under Settings → Monitoring Locations.</div>';
+      return;
+    }
+
+    const pipelines = status.pipelines || {};
+    const deviceOpts = devData.devices.map(d =>
+      `<option value="${escHtml(d.name)}">${escHtml(d.label || d.name)}</option>`
+    ).join('');
+
+    panel.innerHTML = mics.map((mic, idx) => {
+      const micKey = 'mic_' + mic.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/, '');
+      const pip = pipelines[micKey];
+      const isRunning = pip && pip.state !== 'idle';
+      const activeClfs = mic.classifiers || [];
+      const schedule = mic.schedule || 'auto';
+
+      const deviceSel = `<select class="mic-device-sel" data-idx="${idx}" style="font-size:0.78rem;padding:4px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);min-width:180px">
+        <option value="">System default</option>${deviceOpts}
+      </select>`;
+
+      const clfBoxes = ['bird','bat','bee','insect','soil'].map(clf => {
+        const m = _CLF_META[clf];
+        const checked = activeClfs.includes(clf) ? 'checked' : '';
+        return `<label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer;white-space:nowrap">
+          <input type="checkbox" class="mic-clf-check" data-idx="${idx}" data-clf="${clf}" ${checked}
+            style="accent-color:var(--primary);width:14px;height:14px">
+          ${m.icon} ${m.label}
+        </label>`;
+      }).join('');
+
+      const schedSel = `<select class="mic-sched-sel" data-idx="${idx}" style="font-size:0.78rem;padding:4px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <option value="auto" ${schedule === 'auto' ? 'selected' : ''}>Auto (schedule)</option>
+        <option value="manual" ${schedule === 'manual' ? 'selected' : ''}>Manual only</option>
+      </select>`;
+
+      const stateLabel = isRunning
+        ? `<span style="color:var(--primary);font-size:0.75rem">● ${pip.state}${pip.window ? ' — ' + pip.window : ''}</span>`
+        : `<span style="color:var(--muted);font-size:0.75rem">○ Idle</span>`;
+
+      const actionBtn = isRunning
+        ? `<button class="btn btn-sm btn-danger" onclick="_stopMic('${escHtml(micKey)}',this)">■ Stop</button>`
+        : `<button class="btn btn-sm btn-primary" onclick="_startMic(${idx},this)">▶ Start</button>`;
+
+      return `
+        <div class="device-row" id="mic-row-${idx}" style="flex-wrap:wrap;gap:10px;margin-bottom:8px;${isRunning ? 'border-color:var(--primary)' : ''}">
+          <div class="device-info" style="min-width:120px">
+            <div class="device-name">${escHtml(mic.name)}</div>
+            <div class="device-meta" style="margin-top:4px">${stateLabel}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;flex:1;min-width:180px">
+            <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Microphone</div>
+            ${deviceSel}
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Detect</div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">${clfBoxes}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Schedule</div>
+            ${schedSel}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+            ${actionBtn}
+          </div>
+        </div>`;
+    }).join('') + `
+      <div class="btn-group" style="margin-top:12px">
+        <button class="btn btn-primary" id="btn-start-all-mics">▶ Start All</button>
+        <button class="btn btn-outline" id="btn-stop-all-mics">■ Stop All</button>
+      </div>`;
+
+    // Restore selected device values (set after innerHTML so options exist)
+    mics.forEach((mic, idx) => {
+      const sel = panel.querySelector(`.mic-device-sel[data-idx="${idx}"]`);
+      if (sel && mic.device) sel.value = mic.device;
+    });
+
+    // Auto-save on any change
+    panel.querySelectorAll('.mic-device-sel, .mic-sched-sel').forEach(el =>
+      el.addEventListener('change', () => _saveMicConfig(parseInt(el.dataset.idx)))
+    );
+    panel.querySelectorAll('.mic-clf-check').forEach(el =>
+      el.addEventListener('change', () => _saveMicConfig(parseInt(el.dataset.idx)))
+    );
+    document.getElementById('btn-start-all-mics')?.addEventListener('click', _startAllMics);
+    document.getElementById('btn-stop-all-mics')?.addEventListener('click', _stopAllMics);
+
+  } catch (err) {
+    panel.innerHTML = `<div class="empty" style="color:var(--danger)">${err.message}</div>`;
+  }
+}
+
+async function _saveMicConfig(idx) {
+  const panel = document.getElementById('mic-clf-panel');
+  if (!panel) return;
+  const device = panel.querySelector(`.mic-device-sel[data-idx="${idx}"]`)?.value || null;
+  const schedule = panel.querySelector(`.mic-sched-sel[data-idx="${idx}"]`)?.value || 'auto';
+  const classifiers = [...panel.querySelectorAll(`.mic-clf-check[data-idx="${idx}"]:checked`)]
+    .map(el => el.dataset.clf);
+  try {
+    await api.patch(`/api/settings/mics/${idx}`, { device: device || null, classifiers, schedule });
+  } catch (err) {
+    toast(err.message, 'error', 4000);
+  }
+}
+
+async function _startMic(_idx, btn) {
+  btnLoad(btn, '⟳');
+  try {
+    const result = await api.post('/api/pipeline/start_mics?mode=schedule');
+    toast(`Started: ${result.started.join(', ') || 'none new'}`, 'success', 4000);
+    await pollStatus();
+    await loadMicClfPanel();
+  } catch (err) {
+    toast(err.message, 'error', 6000);
+    btnDone(btn);
+  }
+}
+
+async function _stopMic(micKey, btn) {
+  btnLoad(btn, '⟳');
+  try {
+    await api.post(`/api/pipeline/stop?device_key=${encodeURIComponent(micKey)}`);
+    toast('Stopped', 'success', 3000);
+    await pollStatus();
+    await loadMicClfPanel();
+  } catch (err) {
+    toast(err.message, 'error', 6000);
+    btnDone(btn);
+  }
+}
+
+async function _startAllMics() {
+  const btn = document.getElementById('btn-start-all-mics');
+  btnLoad(btn, '⟳ Starting…');
+  try {
+    const result = await api.post('/api/pipeline/start_mics?mode=schedule');
+    const msg = result.started.length
+      ? `Started: ${result.started.join(', ')}`
+      : result.skipped.length ? 'No locations have classifiers configured' : 'All already running';
+    toast(msg, result.started.length ? 'success' : 'warn', 5000);
+    await pollStatus();
+    await loadMicClfPanel();
+  } catch (err) {
+    toast(err.message, 'error', 6000);
+  } finally { btnDone(btn); }
+}
+
+async function _stopAllMics() {
+  const btn = document.getElementById('btn-stop-all-mics');
+  btnLoad(btn, '⟳');
+  try {
+    await api.post('/api/pipeline/stop_all');
+    toast('All recordings stopped', 'warn', 4000);
+    await pollStatus();
+    await loadMicClfPanel();
+  } catch (err) {
+    toast(err.message, 'error', 6000);
+  } finally { btnDone(btn); }
 }
 
 async function loadSchedule() {
@@ -1368,13 +1536,14 @@ async function confirmClearLogs() {
 async function renderSettings() {
   document.getElementById('main').innerHTML = `
     <div class="card">
-      <div class="card-title">Recording Location ${helpBtn('location')}</div>
+      <div class="card-title">Site Name ${helpBtn('location')}</div>
       <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">
-        Used for BirdNET species filtering, CSV logs, and MQTT detection messages.
+        The name of this recording site. Appears in every detection record, CSV export, and MQTT payload as <code>site_name</code>.
+        Distinct from individual Monitoring Locations (microphone positions) configured below.
       </p>
       <div class="form-row">
         <div class="form-group" style="flex:2">
-          <label>Location Name</label>
+          <label>Site Name</label>
           <input type="text" id="loc-name" placeholder="e.g. Blenheim Palace" style="min-width:220px">
         </div>
         <div class="form-group">
@@ -1506,6 +1675,21 @@ async function renderSettings() {
       </div>
     </div>
 
+    <div class="card">
+      <div class="card-title">Auto-resume on Boot</div>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">
+        When enabled, recording resumes automatically after a reboot or power cut — no manual intervention needed.
+        Disabled automatically when you click Stop.
+      </p>
+      <label style="display:flex;align-items:center;gap:10px;font-size:0.88rem;cursor:pointer">
+        <input type="checkbox" id="autostart-enabled" style="accent-color:var(--primary);width:16px;height:16px">
+        <span>Resume recording on boot</span>
+      </label>
+      <div class="btn-group" style="margin-top:14px">
+        <button class="btn btn-primary btn-sm" id="btn-save-autostart">Save</button>
+      </div>
+    </div>
+
   `;
 
   // Load location
@@ -1535,12 +1719,30 @@ async function renderSettings() {
     renderMicsRows(await api.get('/api/settings/mics'));
   } catch { renderMicsRows([]); }
 
+  // Load autostart
+  try {
+    const a = await api.get('/api/settings/autostart');
+    document.getElementById('autostart-enabled').checked = !!a.enabled;
+  } catch { /* non-fatal */ }
+
   document.getElementById('mqtt-mode').addEventListener('change', e => _mqttModeChanged(e.target.value));
   document.getElementById('btn-save-location').addEventListener('click', saveLocation);
   document.getElementById('btn-save-mqtt').addEventListener('click', saveMqtt);
   document.getElementById('btn-test-mqtt').addEventListener('click', testMqtt);
   document.getElementById('btn-add-mic').addEventListener('click', showMicAddForm);
   document.getElementById('btn-confirm-mic').addEventListener('click', confirmAddMic);
+  document.getElementById('btn-save-autostart').addEventListener('click', saveAutostart);
+}
+
+async function saveAutostart() {
+  const btn = document.getElementById('btn-save-autostart');
+  btnLoad(btn, '⟳');
+  try {
+    await api.post('/api/settings/autostart', { enabled: document.getElementById('autostart-enabled').checked });
+    toast('Auto-resume setting saved', 'success', 3000);
+  } catch (err) {
+    toast(err.message, 'error', 5000);
+  } finally { btnDone(btn); }
 }
 
 function _mqttModeChanged(mode) {
@@ -1795,13 +1997,13 @@ const HELP = {
     <p>Changes take effect on the next pipeline start.</p>`
   },
   location: {
-    icon: '📍', title: 'Recording Location',
-    body: `<p>The location name, latitude, and longitude are included in every detection record — in the CSV exports, the MQTT payload, and the detection log.</p>
+    icon: '📍', title: 'Site Name',
+    body: `<p>The site name, latitude, and longitude identify the overall recording site — published as <code>site_name</code> in every detection record, CSV export, and MQTT payload.</p>
+    <p><strong>Site Name vs Monitoring Locations:</strong> Site Name is the top-level label for the whole deployment (e.g. "Weaveley Solar"). Monitoring Locations are the individual microphone positions within that site (e.g. "South Control", "North Meadow") — configured separately below.</p>
     <p><strong>Why it matters:</strong></p>
     <ul style="padding-left:16px;margin:8px 0">
-      <li>BirdNET uses the coordinates to apply a <strong>regional species filter</strong> — it prioritises species known to occur at your location and season, improving accuracy.</li>
+      <li>BirdNET uses the coordinates to apply a <strong>regional species filter</strong>, improving accuracy for your location and season.</li>
       <li>Location data makes exported CSVs <strong>directly importable into ecological databases</strong> (NBN Atlas, iRecord, GBIF) without manual annotation.</li>
-      <li>If you run BASE at multiple sites, each deployment gets its own name, making it easy to compare data across locations.</li>
     </ul>`
   }
 };

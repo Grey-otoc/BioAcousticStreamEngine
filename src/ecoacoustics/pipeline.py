@@ -58,7 +58,7 @@ class Pipeline:
         pipeline.close()
     """
 
-    def __init__(self, config_path: str = "config/settings.yaml", detection_callback: Optional[Callable] = None, level_callback: Optional[Callable] = None, device_override=None):
+    def __init__(self, config_path: str = "config/settings.yaml", detection_callback: Optional[Callable] = None, level_callback: Optional[Callable] = None, device_override=None, config_override: Optional[dict] = None):
         """Load configuration and prepare all subsystems.
 
         Args:
@@ -66,6 +66,14 @@ class Pipeline:
         """
         with open(config_path) as f:
             self._cfg = yaml.safe_load(f)
+
+        # Per-mic overrides: merge dicts (e.g. classifiers section), replace everything else.
+        if config_override:
+            for key, val in config_override.items():
+                if isinstance(val, dict) and isinstance(self._cfg.get(key), dict):
+                    self._cfg[key] = {**self._cfg.get(key, {}), **val}
+                else:
+                    self._cfg[key] = val
 
         secrets_path = Path(config_path).parent / "secrets.yaml"
         if secrets_path.exists():
@@ -110,6 +118,11 @@ class Pipeline:
                 mics=mics_cfg,
             )
 
+        # Auto-derive monitoring location: use the single configured mic name if there is
+        # exactly one, otherwise leave blank (multi-mic setups stamp location via device).
+        _mics = self._cfg.get("mics") or []
+        self._mic_location: str = _mics[0].get("name", "") if len(_mics) == 1 else ""
+
         self._logger = DetectionLogger(
             console=out_cfg.get("console", True),
             detections_csv=out_cfg.get("detections_csv"),
@@ -118,6 +131,7 @@ class Pipeline:
             latitude=loc_cfg.get("latitude", bird_cfg.get("latitude")),
             longitude=loc_cfg.get("longitude", bird_cfg.get("longitude")),
             location_name=loc_cfg.get("name", ""),
+            monitoring_location=self._mic_location,
             mqtt_publisher=mqtt_publisher,
             detection_callback=detection_callback,
         )
@@ -129,9 +143,13 @@ class Pipeline:
         )
 
         weather_cfg = self._cfg.get("weather", {})
+        # For per-mic pipelines, use the monitoring location's own coordinates for weather
+        # so each mic gets accurate local conditions rather than the generic site position.
+        _wx_lat = _mics[0].get("latitude", loc_cfg.get("latitude", bird_cfg.get("latitude", 0.0))) if len(_mics) == 1 else loc_cfg.get("latitude", bird_cfg.get("latitude", 0.0))
+        _wx_lon = _mics[0].get("longitude", loc_cfg.get("longitude", bird_cfg.get("longitude", 0.0))) if len(_mics) == 1 else loc_cfg.get("longitude", bird_cfg.get("longitude", 0.0))
         self._weather = WeatherCache(
-            lat=loc_cfg.get("latitude", bird_cfg.get("latitude", 0.0)),
-            lon=loc_cfg.get("longitude", bird_cfg.get("longitude", 0.0)),
+            lat=_wx_lat,
+            lon=_wx_lon,
             enabled=weather_cfg.get("enabled", True),
         )
 
@@ -150,11 +168,6 @@ class Pipeline:
         self._processors: dict[str, AudioProcessor] = {}
 
         clf_devices = self._cfg.get("classifiers", {}).get("devices", {})
-
-        # Auto-derive monitoring location: use the single configured mic name if there is
-        # exactly one, otherwise leave blank (multi-mic setups stamp location via device).
-        _mics = self._cfg.get("mics") or []
-        self._mic_location: str = _mics[0].get("name", "") if len(_mics) == 1 else ""
 
         default_device = self._cfg["audio"].get("device")
         max_queue_size = self._cfg["audio"].get("max_queue_size", 20)

@@ -94,7 +94,7 @@ class MqttPublisher:
     def publish(self, det: Detection, session: Session, call_n: int) -> None:
         """Publish a single detection to the broker."""
         ts = datetime.datetime.fromtimestamp(det.timestamp)
-        # Monitoring location name comes from classifiers.locations stamped onto the detection.
+        # Monitoring location name is stamped onto the detection by the pipeline (_mic_location).
         loc_name = det.metadata.get("mic_name", "")
         # Look up the monitoring location's coordinates from the mics list.
         mic_info = next((m for m in self._mics if m.get("name") == loc_name), {})

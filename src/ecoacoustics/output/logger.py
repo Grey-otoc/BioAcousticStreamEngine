@@ -48,11 +48,13 @@ _DETECTION_FIELDS = [
     "confidence", "call_number_in_session",
     "location_name", "latitude", "longitude",
     *_WEATHER_FIELDS,
+    "monitoring_location",   # mic/monitoring-location name (additive — blank in old rows)
 ]
 
 _SESSION_FIELDS = [
     "session_id", "window_name", "date", "session_start", "session_end",
     "duration_mins", "location_name", "species", "total_calls", "max_confidence", "avg_confidence",
+    "monitoring_location",
 ]
 
 
@@ -74,6 +76,7 @@ class DetectionLogger:
         latitude: Optional[float] = None,
         longitude: Optional[float] = None,
         location_name: Optional[str] = None,
+        monitoring_location: Optional[str] = None,
         mqtt_publisher: Optional["MqttPublisher"] = None,
         detection_callback: Optional[Callable] = None,
     ):
@@ -94,6 +97,7 @@ class DetectionLogger:
         self._lat = latitude
         self._lon = longitude
         self._location_name = location_name or ""
+        self._monitoring_location = monitoring_location or ""
         self._mqtt = mqtt_publisher
         self._detection_callback = detection_callback
 
@@ -134,6 +138,7 @@ class DetectionLogger:
             return
         for row in session.species_rows():
             row["location_name"] = self._location_name
+            row["monitoring_location"] = self._monitoring_location
             self._sess_writer.writerow(row)
         self._sess_file.flush()
         if self._console:
@@ -170,6 +175,7 @@ class DetectionLogger:
             "latitude": self._lat or "",
             "longitude": self._lon or "",
             **{k: det.metadata.get(k, "") for k in _WEATHER_FIELDS},
+            "monitoring_location": det.metadata.get("mic_name", self._monitoring_location),
         })
         self._det_file.flush()
 

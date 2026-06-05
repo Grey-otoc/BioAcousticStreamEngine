@@ -1,5 +1,6 @@
 """API routes — system status and pipeline control."""
 
+import re
 import shutil
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
@@ -7,6 +8,16 @@ from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, HTTPException
+
+_AUTOSTART = Path("config/autostart.yaml")
+
+
+def _save_autostart(enabled: bool) -> None:
+    try:
+        with open(_AUTOSTART, "w") as f:
+            yaml.dump({"enabled": enabled}, f)
+    except Exception:
+        pass
 
 from ecoacoustics.api import state
 
@@ -18,11 +29,13 @@ except PackageNotFoundError:
     _VERSION = "0.1.0"
 
 
-def _ensure_pipeline(device_key: str, device_index=None, device_name: str = "Default"):
+def _ensure_pipeline(device_key: str, device_index=None, device_name: str = "Default",
+                     config_override: dict | None = None, mic_name: str = ""):
     """Return an existing pipeline manager, creating and wiring one if needed."""
     from ecoacoustics.api.app import get_or_create_pipeline
 
-    mgr = get_or_create_pipeline(device_key, device_index, device_name)
+    mgr = get_or_create_pipeline(device_key, device_index, device_name,
+                                 config_override=config_override, mic_name=mic_name)
     if mgr._broadcast_queue is None and state.event_loop is not None:
         mgr.set_async_context(state.event_loop, state.broadcast_queue)
     return mgr
@@ -71,6 +84,7 @@ def start_wake(duration_minutes: int = None, device_key: str = "default",
     ok = mgr.start_wake(duration_minutes=duration_minutes)
     if not ok:
         raise HTTPException(400, f"Device '{device_key}' is already running")
+    _save_autostart(True)
     return {"started": True, "mode": "wake", "device_key": device_key}
 
 
@@ -80,6 +94,7 @@ def start_schedule(device_key: str = "default", device_index: int = None, device
     ok = mgr.start_schedule()
     if not ok:
         raise HTTPException(400, f"Device '{device_key}' is already running")
+    _save_autostart(True)
     return {"started": True, "mode": "schedule", "device_key": device_key}
 
 
@@ -90,6 +105,7 @@ def stop_pipeline(device_key: str = "default"):
     ok = state.pipeline_instances[device_key].stop()
     if not ok:
         raise HTTPException(400, f"Device '{device_key}' is not running")
+    _save_autostart(False)
     return {"stopped": True, "device_key": device_key}
 
 
@@ -122,4 +138,47 @@ def stop_all():
         if mgr.state != "idle":
             mgr.stop()
             stopped.append(key)
+    _save_autostart(False)
     return {"stopped": stopped}
+
+
+def _mic_key(name: str) -> str:
+    return "mic_" + re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
+
+
+@router.post("/pipeline/start_mics")
+def start_mics(mode: str = "schedule"):
+    """Start one pipeline per configured monitoring location that has classifiers assigned."""
+    with open(Path("config/settings.yaml")) as f:
+        cfg = yaml.safe_load(f)
+
+    mics = cfg.get("mics") or []
+    started, already_running, skipped = [], [], []
+
+    for mic in mics:
+        clf_list = mic.get("classifiers") or []
+        device = mic.get("device") or None
+
+        if not clf_list:
+            skipped.append(mic.get("name", "?"))
+            continue
+
+        key = _mic_key(mic["name"])
+        config_override = {
+            "classifiers": {
+                "active": clf_list,
+                "devices": {clf: device for clf in clf_list},
+            },
+            "mics": [mic],
+        }
+
+        mgr = _ensure_pipeline(key, device_index=None, device_name=mic["name"],
+                               config_override=config_override, mic_name=mic["name"])
+
+        ok = mgr.start_schedule() if mode == "schedule" else mgr.start_wake()
+        (started if ok else already_running).append(mic["name"])
+
+    if started:
+        _save_autostart(True)
+
+    return {"started": started, "already_running": already_running, "skipped": skipped}

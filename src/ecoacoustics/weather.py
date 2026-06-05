@@ -29,7 +29,7 @@ _URL = (
     "&wind_speed_unit=kmh&timezone=auto"
 )
 
-FETCH_INTERVAL = 3600  # seconds between refreshes
+FETCH_INTERVAL = 900  # seconds between refreshes (Open-Meteo current updates every ~15 min)
 
 
 class WeatherCache:

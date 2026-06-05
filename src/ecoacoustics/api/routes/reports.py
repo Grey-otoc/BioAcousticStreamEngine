@@ -27,16 +27,17 @@ def _paths() -> tuple[Path, Path]:
 
 @router.get("/reports/locations")
 def list_locations():
-    """All unique location_name values in detections.csv."""
+    """All unique site and monitoring location values in detections.csv."""
     det_path, _ = _paths()
     if not det_path.exists():
         return {"locations": []}
     locations: set[str] = set()
     with open(det_path) as f:
         for row in csv.DictReader(f):
-            loc = row.get("location_name", "").strip()
-            if loc:
-                locations.add(loc)
+            for field in ("location_name", "monitoring_location"):
+                loc = row.get(field, "").strip()
+                if loc:
+                    locations.add(loc)
     return {"locations": sorted(locations)}
 
 
@@ -54,7 +55,7 @@ def list_species(
         for row in csv.DictReader(f):
             if classifier and row.get("classifier", "") != classifier:
                 continue
-            if location and row.get("location_name", "") != location:
+            if location and location not in (row.get("location_name", ""), row.get("monitoring_location", "")):
                 continue
             s = row.get("species_common", "").strip()
             if s:
@@ -85,7 +86,7 @@ def summary_report(
                         continue
                     if classifier and row.get("classifier", "") != classifier:
                         continue
-                    if location and row.get("location_name", "") != location:
+                    if location and location not in (row.get("location_name", ""), row.get("monitoring_location", "")):
                         continue
                     d = row.get("date", "")
                     if not (date_from <= d <= date_to):
@@ -111,7 +112,7 @@ def summary_report(
                     d = row.get("date", "")
                     if not (date_from <= d <= date_to):
                         continue
-                    if location and row.get("location_name", "") != location:
+                    if location and location not in (row.get("location_name", ""), row.get("monitoring_location", "")):
                         continue
                     if d not in by_date:
                         by_date[d] = {"date": d, "sessions": 0, "species_set": set(), "total_calls": 0}
@@ -175,7 +176,7 @@ def download_detections(
                     continue
                 if classifier and row.get("classifier", "") != classifier:
                     continue
-                if location and row.get("location_name", "") != location:
+                if location and location not in (row.get("location_name", ""), row.get("monitoring_location", "")):
                     continue
                 writer.writerow(row)
 
@@ -223,7 +224,7 @@ def download_sessions(
                     continue
                 if species and row.get("species", "") != species:
                     continue
-                if location and row.get("location_name", "") != location:
+                if location and location not in (row.get("location_name", ""), row.get("monitoring_location", "")):
                     continue
                 writer.writerow(row)
 
@@ -270,7 +271,7 @@ def heatmap(
                 clf = row.get("classifier", "")
                 if classifier and clf != classifier:
                     continue
-                if location and row.get("location_name", "") != location:
+                if location and location not in (row.get("location_name", ""), row.get("monitoring_location", "")):
                     continue
                 species = row.get("species_common", "").strip()
                 if not species:

@@ -10,14 +10,19 @@ Author: David Green, Blenheim Palace
 """
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 import uvicorn
+import yaml
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import Scope, Receive, Send
+
+_log = logging.getLogger(__name__)
+_AUTOSTART = Path("config/autostart.yaml")
 
 
 class NoCacheStaticFiles(StaticFiles):
@@ -44,14 +49,41 @@ _ws_clients: set[WebSocket] = set()
 _broadcast_queue: asyncio.Queue = asyncio.Queue()
 
 
-def get_or_create_pipeline(device_key: str, device_index=None, device_name: str = "Default") -> PipelineManager:
+def get_or_create_pipeline(device_key: str, device_index=None, device_name: str = "Default",
+                           config_override: dict | None = None, mic_name: str = "") -> PipelineManager:
     if device_key not in state.pipeline_instances:
         state.pipeline_instances[device_key] = PipelineManager(
             config_path=CONFIG_PATH,
             device_index=device_index,
             device_name=device_name,
+            config_override=config_override,
+            mic_name=mic_name,
         )
     return state.pipeline_instances[device_key]
+
+
+def _maybe_autostart(mgr) -> None:
+    """Resume recording after boot or power cut if the user had started a session."""
+    if not _AUTOSTART.exists():
+        return
+    try:
+        with open(_AUTOSTART) as f:
+            a_cfg = yaml.safe_load(f) or {}
+        if not a_cfg.get("enabled", False):
+            return
+        # If any mics have classifiers configured, start them all; otherwise use default.
+        with open(CONFIG_PATH) as f:
+            settings = yaml.safe_load(f) or {}
+        mics_with_clfs = [m for m in (settings.get("mics") or []) if m.get("classifiers")]
+        if mics_with_clfs:
+            from ecoacoustics.api.routes.status import start_mics
+            _log.info("Autostart: resuming %d configured monitoring locations", len(mics_with_clfs))
+            start_mics(mode="schedule")
+        else:
+            _log.info("Autostart: resuming default schedule recording")
+            mgr.start_schedule()
+    except Exception as exc:
+        _log.warning("Autostart failed: %s", exc)
 
 
 @asynccontextmanager
@@ -65,6 +97,7 @@ async def lifespan(app: FastAPI):
     mgr.set_async_context(loop, _broadcast_queue)
     task = asyncio.create_task(_broadcast_loop())
     hb_task = asyncio.create_task(heartbeat_loop(CONFIG_PATH))
+    _maybe_autostart(mgr)
     yield
     task.cancel()
     hb_task.cancel()
