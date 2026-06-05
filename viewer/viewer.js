@@ -6,6 +6,8 @@ const DB_NAME    = 'base-viewer';
 const DB_VERSION = 1;
 const MAX_SOUNDS = 5;
 const MAX_SIMULTANEOUS_AUDIO = 3;
+const MAX_GALLERY_ENTRIES = 200;  // hard DOM cap regardless of retention setting
+const MAX_BUFFER_CACHE    = 25;   // max decoded AudioBuffers kept in heap (~30-50 MB)
 function _galleryExpiryMs() {
   const h = Number(loadSettings().galleryRetainHours ?? 24);
   return h > 0 ? h * 60 * 60 * 1000 : Infinity;  // 0 = unlimited
@@ -27,7 +29,8 @@ let activeAudio   = 0;
 let soundEnabled  = true;
 let audioCtx      = null;     // Web Audio API context — must be created from a user gesture
 const playingNow  = new Set();
-const bufferCache = {};       // default asset url → decoded AudioBuffer
+const bufferCache     = {};   // default asset url → decoded AudioBuffer
+const bufferCacheKeys = [];   // insertion order — oldest evicted when cap is hit
 let mqttClient  = null;
 let db          = null;
 let probabilityThreshold = 0; // 0.0–1.0; set via &probability=N URL param
@@ -272,7 +275,20 @@ function getFilteredEntries() {
     .sort((a, b) => (b.lastSeenTs || 0) - (a.lastSeenTs || 0));
 }
 
+let _renderTimer   = null;
+let _renderPending = null;  // last flashName queued during debounce window
+
 function renderGallery(flashName) {
+  if (flashName) _renderPending = flashName;
+  if (_renderTimer) return;
+  _renderTimer = setTimeout(() => {
+    _renderTimer = null;
+    _doRenderGallery(_renderPending);
+    _renderPending = null;
+  }, 300);
+}
+
+function _doRenderGallery(flashName) {
   const grid  = document.getElementById('gallery-grid');
   const empty = document.getElementById('empty-state');
   if (!grid) return;
@@ -370,10 +386,15 @@ function _todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
+let _saveTimer = null;
 function saveGalleryToStorage() {
-  try {
-    localStorage.setItem('base-viewer-gallery', JSON.stringify({ date: _todayKey(), gallery }));
-  } catch { /* storage full or unavailable */ }
+  if (_saveTimer) return;
+  _saveTimer = setTimeout(() => {
+    _saveTimer = null;
+    try {
+      localStorage.setItem('base-viewer-gallery', JSON.stringify({ date: _todayKey(), gallery }));
+    } catch { /* storage full or unavailable */ }
+  }, 30000);
 }
 
 function loadGalleryFromStorage() {
@@ -393,12 +414,23 @@ function loadGalleryFromStorage() {
 function purgeStaleGallery() {
   const cutoff = Date.now() - _galleryExpiryMs();
   let changed = false;
+
   for (const name of Object.keys(gallery)) {
     if ((gallery[name].lastSeenTs || 0) < cutoff) {
       delete gallery[name];
       changed = true;
     }
   }
+
+  // Hard cap: evict oldest entries beyond MAX_GALLERY_ENTRIES
+  const all = Object.values(gallery).sort((a, b) => (a.lastSeenTs || 0) - (b.lastSeenTs || 0));
+  if (all.length > MAX_GALLERY_ENTRIES) {
+    for (const e of all.slice(0, all.length - MAX_GALLERY_ENTRIES)) {
+      delete gallery[e.entryId];
+      changed = true;
+    }
+  }
+
   if (changed) {
     saveGalleryToStorage();
     renderGallery();
@@ -455,12 +487,16 @@ async function playDetectionSound(key) {
       const clip = record.clips[Math.floor(Math.random() * record.clips.length)];
       audioBuffer = await audioCtx.decodeAudioData(clip.data.slice(0));
     } else {
-      // Default asset: fetch once and cache the decoded buffer
+      // Default asset: fetch once and cache the decoded buffer, evicting oldest if over cap
       const assetUrl = 'assets/sounds/' + key + '.mp3';
       if (!bufferCache[assetUrl]) {
         const resp = await fetch(assetUrl);
         if (!resp.ok) return;
         bufferCache[assetUrl] = await audioCtx.decodeAudioData(await resp.arrayBuffer());
+        bufferCacheKeys.push(assetUrl);
+        if (bufferCacheKeys.length > MAX_BUFFER_CACHE) {
+          delete bufferCache[bufferCacheKeys.shift()];
+        }
       }
       audioBuffer = bufferCache[assetUrl];
     }
