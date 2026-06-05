@@ -247,6 +247,7 @@ def set_classifiers(body: ClassifierDevicesModel):
         cfg["classifiers"] = {}
     cfg["classifiers"]["active"] = body.active
     cfg["classifiers"]["devices"] = body.devices
+    cfg["classifiers"].pop("locations", None)  # removed feature — purge stale key
     with open(_SETTINGS, "w") as f:
         yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
     return {"updated": True}
