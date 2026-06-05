@@ -101,7 +101,7 @@ function updateStateBanner(pipelines) {
     banner.querySelector('.banner-sub').textContent = `${p.device_name}  ·  Window: ${p.window || 'manual'}  ·  Started ${fmtTime(p.started_at)}`;
   } else {
     banner.className = 'state-banner listening';
-    banner.querySelector('.banner-title').textContent = `● ${running.length} devices listening`;
+    banner.querySelector('.banner-title').textContent = `● ${running.length} locations recording`;
     banner.querySelector('.banner-sub').textContent = running.map(p => p.device_name).join(', ');
   }
 }
@@ -267,7 +267,7 @@ function renderDashboard() {
         </div>
 
         <div class="card">
-          <div class="card-title">Recording Devices</div>
+          <div class="card-title" id="device-panel-title">Recording Devices</div>
           <div id="device-panel"><div class="empty">Loading devices...</div></div>
         </div>
       </div>
@@ -309,6 +309,14 @@ async function refreshDevicePanel() {
       api.get('/api/schedule').catch(() => ({ windows: [] })),
       api.get('/api/settings/classifiers').catch(() => ({ active: [], devices: {} })),
     ]);
+
+    // If any monitoring locations have classifiers configured, show those instead of
+    // raw PipeWire devices — they are the real recording units for the multi-mic model.
+    const configuredMics = micsData.filter(m => (m.classifiers || []).length > 0);
+    if (configuredMics.length > 0) {
+      _refreshMicLocationPanel(panel, configuredMics, statusData, schedData);
+      return;
+    }
 
     const schedWindows = schedData.windows || [];
     const activeWin = schedWindows.find(w => w.active) || null;
@@ -399,6 +407,80 @@ async function refreshDevicePanel() {
     }).join('')}</div>`;
   } catch (err) {
     panel.innerHTML = `<div class="empty" style="color:var(--danger)">${err.message}</div>`;
+  }
+}
+
+function _micKey(name) {
+  return 'mic_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/, '');
+}
+
+function _refreshMicLocationPanel(panel, mics, statusData, schedData) {
+  const titleEl = document.getElementById('device-panel-title');
+  if (titleEl) titleEl.textContent = 'Recording Locations';
+
+  const pipelines = statusData.pipelines || {};
+  const schedWindows = schedData.windows || [];
+  const activeWin = schedWindows.find(w => w.active) || null;
+  const schedTag = activeWin
+    ? `<span class="sched-tag sched-active">${activeWin.name.replace(/_/g, ' ')}</span>`
+    : '';
+
+  const rows = mics.map(mic => {
+    const key = _micKey(mic.name);
+    const pip = pipelines[key];
+    const isRunning = pip && pip.state !== 'idle';
+    const clfs = (mic.classifiers || []).map(clf => {
+      const m = CLASSIFIERS.find(c => c.key === clf);
+      return m ? `<span class="clf-tag clf-${clf}">${m.icon} ${m.label}</span>` : '';
+    }).join('');
+    const deviceLabel = mic.device
+      ? `<span style="font-size:0.72rem;color:var(--muted);font-family:var(--mono)">${escHtml(mic.device.split('.').slice(-2).join('…'))}</span>`
+      : `<span style="font-size:0.72rem;color:var(--warning)">No device assigned — configure in Schedule</span>`;
+    const stateLabel = isRunning
+      ? `<span style="color:var(--primary)">● ${pip.state}${pip.window ? ' — ' + pip.window : ''}</span>`
+      : `<span style="color:var(--muted)">○ Idle</span>`;
+    const actionBtn = isRunning
+      ? `<button class="btn btn-sm btn-danger" onclick="_stopMicByKey('${escHtml(key)}',this)">■ Stop</button>`
+      : `<button class="btn btn-sm btn-primary" onclick="_startOneMic(this)">▶ Start</button>`;
+
+    return `
+      <div class="device-row ${isRunning ? 'running' : ''}">
+        <div class="device-info">
+          <div class="device-name">${escHtml(mic.name)}${schedTag}${clfs}</div>
+          <div class="device-meta" style="margin-top:3px">${deviceLabel}</div>
+          <div class="device-meta">${stateLabel}</div>
+        </div>
+        <div class="device-actions">${actionBtn}</div>
+      </div>`;
+  }).join('');
+
+  panel.innerHTML = `<div class="device-grid">${rows}</div>
+    <div class="btn-group" style="margin-top:12px">
+      <button class="btn btn-primary btn-sm" onclick="_startAllMics()">▶ Start All</button>
+      <button class="btn btn-outline btn-sm" onclick="_stopAllMics()">■ Stop All</button>
+    </div>`;
+}
+
+async function _stopMicByKey(micKey, btn) {
+  btnLoad(btn, '⟳');
+  try {
+    await api.post(`/api/pipeline/stop?device_key=${encodeURIComponent(micKey)}`);
+    await pollStatus();
+  } catch (err) {
+    toast(err.message, 'error', 5000);
+    btnDone(btn);
+  }
+}
+
+async function _startOneMic(btn) {
+  btnLoad(btn, '⟳');
+  try {
+    const result = await api.post('/api/pipeline/start_mics?mode=schedule');
+    if (result.started.length) toast(`Started: ${result.started.join(', ')}`, 'success', 4000);
+    await pollStatus();
+  } catch (err) {
+    toast(err.message, 'error', 5000);
+    btnDone(btn);
   }
 }
 
