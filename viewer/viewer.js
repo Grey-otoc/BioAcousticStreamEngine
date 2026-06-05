@@ -188,7 +188,8 @@ function connect() {
     try {
       const data = JSON.parse(payload.toString());
       if (data.type === 'heartbeat' && data.site_name) {
-        heartbeats[data.site_name] = { ...data, receivedAt: Date.now() };
+        const receivedAt = data.timestamp ? new Date(data.timestamp).getTime() : Date.now();
+        heartbeats[data.site_name] = { ...data, receivedAt };
         renderHeartbeats();
       } else if (data.species_common) {
         updateGallery(data);
