@@ -818,15 +818,15 @@ function detectionCard(det) {
   const pct = Math.round(det.confidence * 100);
   const classifierInfo = CLASSIFIERS.find(c => c.key === det.classifier);
   const icon = classifierInfo ? classifierInfo.icon : '◈';
-  const deviceTag = det.device_name && det.device_name !== 'Default'
-    ? `<span class="classifier-badge" style="color:var(--accent)">${det.device_name}</span>` : '';
+  const locLabel = det.location_name || det.site_name || '';
+  const locTag = locLabel ? `<span class="classifier-badge" style="color:var(--accent)">${locLabel}</span>` : '';
   return `
     <div class="detection-card">
       <span class="classifier-badge">${icon} ${det.classifier}</span>
       <div class="det-body">
         <div class="det-top">
           <span class="species">${det.species_common}</span>
-          ${deviceTag}
+          ${locTag}
         </div>
         <div class="det-bottom">
           <span class="scientific">${det.species_scientific || ''}</span>

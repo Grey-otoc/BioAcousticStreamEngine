@@ -294,6 +294,7 @@ class PipelineManager:
             "device_name": self._device_name,
             "device_index": self._device_index,
             "site_name": location_name,
+            "location_name": det.metadata.get("mic_name", ""),
         }
         try:
             asyncio.run_coroutine_threadsafe(
