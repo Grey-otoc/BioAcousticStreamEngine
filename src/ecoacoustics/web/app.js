@@ -1053,15 +1053,22 @@ async function loadMicClfPanel() {
     }
 
     const pipelines = status.pipelines || {};
-    const noDevices = !devData.devices.length;
+    const deviceCount = devData.devices.length;
+    const deviceNote = devData.note || '';
     const deviceOpts = devData.devices.map(d =>
       `<option value="${escHtml(d.name)}">${escHtml(d.label || d.name)}${d.is_default ? ' ★' : ''}</option>`
     ).join('');
-    const deviceWarn = noDevices
-      ? `<p style="font-size:0.78rem;color:var(--warning);margin-bottom:10px">⚠ No audio devices detected — check that PipeWire/PulseAudio is running and microphones are connected.</p>`
-      : '';
 
-    panel.innerHTML = deviceWarn + mics.map((mic, idx) => {
+    const deviceBanner = deviceNote
+      ? `<p style="font-size:0.78rem;color:var(--warning);margin:0 0 12px;padding:8px 10px;background:rgba(210,153,34,0.10);border-radius:var(--radius)">
+           ⚠ ${escHtml(deviceNote)}
+           <button class="btn btn-sm btn-outline" style="margin-left:10px;font-size:0.72rem" onclick="loadMicClfPanel()">↺ Refresh</button>
+         </p>`
+      : `<p style="font-size:0.75rem;color:var(--muted);margin:0 0 10px">${deviceCount} microphone${deviceCount !== 1 ? 's' : ''} detected
+           <button class="btn btn-sm btn-outline" style="margin-left:8px;font-size:0.72rem" onclick="loadMicClfPanel()">↺ Refresh</button>
+         </p>`;
+
+    panel.innerHTML = deviceBanner + mics.map((mic, idx) => {
       const micKey = 'mic_' + mic.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/, '');
       const pip = pipelines[micKey];
       const isRunning = pip && pip.state !== 'idle';

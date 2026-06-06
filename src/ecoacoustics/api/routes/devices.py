@@ -120,4 +120,12 @@ def list_devices():
         except Exception as exc:
             return {"devices": [], "error": str(exc)}
 
-    return {"devices": sources}
+    return {
+        "devices": sources,
+        "count": len(sources),
+        "note": (
+            "Only built-in audio found. If USB microphones are plugged in, check that "
+            "they are connected through a powered USB hub and run `dmesg | tail -20` "
+            "to confirm the kernel recognises them."
+        ) if len(sources) <= 1 else None,
+    }
