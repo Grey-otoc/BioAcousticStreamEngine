@@ -80,7 +80,8 @@ nav a {
 }
 nav a:hover { background: var(--surface2); color: var(--text); }
 nav a.active { background: var(--surface2); color: var(--primary); font-weight: 600; }
-nav a .icon { font-size: 1rem; width: 20px; text-align: center; }
+nav a .icon { display: inline-flex; align-items: center; justify-content: center; width: 20px; flex-shrink: 0; }
+nav a .icon svg { width: 16px; height: 16px; }
 nav .nav-footer { margin-top: auto; }
 
 /* ── Main content ── */

@@ -2228,7 +2228,10 @@ const _spec = {
   source: null,
   monitorGain: null,
   monitoring: false,
-  freqData: null,   // preallocated FFT buffer — avoids per-frame allocation at 60fps
+  freqData: null,
+  evtSource: null,   // EventSource when using server-side FFT streaming
+  serverData: null,  // latest FFT Uint8Array received from server
+  serverMode: false, // true when server captures audio (location selected)
 };
 
 // Viridis-inspired colormap scaled to BASE's green theme
@@ -2408,7 +2411,7 @@ async function onSpecLocationChange() {
     const wasMonitoring = _spec.monitoring;
     _stopSpectrogram();
     await _startSpectrogram();
-    if (wasMonitoring) toggleMonitor();
+    if (wasMonitoring && !_spec.serverMode) toggleMonitor();
   }
 }
 
@@ -2427,7 +2430,7 @@ function _syncSpecToRunningDevice() {
 }
 
 async function changeSpecDevice() {
-  if (!_spec.running) return;
+  if (!_spec.running || _spec.serverMode) return;
   const wasMonitoring = _spec.monitoring;
   _stopSpectrogram();
   await _startSpectrogram();
@@ -2451,34 +2454,82 @@ async function toggleSpectrogram() {
 }
 
 async function _startSpectrogram() {
+  const pipewireSource = document.getElementById('spec-location')?.value || '';
+  if (pipewireSource) {
+    _startServerSpectrogram(pipewireSource);
+  } else {
+    await _startBrowserSpectrogram();
+  }
+}
+
+// Server captures audio from the named PipeWire source and streams FFT data via SSE.
+// This bypasses browser deviceId matching entirely — works even when two USB mics
+// share the same generic browser label.
+function _startServerSpectrogram(pipewireSource) {
+  const canvas = document.getElementById('spec-canvas');
+  if (!canvas) return;
+  canvas.width = canvas.offsetWidth || 1200;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0d1a10';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  _buildFreqAxis(48000, document.getElementById('spec-log')?.checked || false);
+
+  const locSel = document.getElementById('spec-location');
+  const locationName = locSel?.selectedOptions[0]?.textContent || pipewireSource;
+  const indicator = document.getElementById('spec-active-label');
+  if (indicator) indicator.textContent = `Using: ${locationName}`;
+
+  _spec.serverMode = true;
+  _spec.running = true;
+  _spec.serverData = null;
+
+  const url = `/api/spectrogram/stream?device=${encodeURIComponent(pipewireSource)}`;
+  _spec.evtSource = new EventSource(url);
+
+  _spec.evtSource.onmessage = (e) => {
+    if (!_spec.running) return;
+    try { _spec.serverData = JSON.parse(e.data); } catch { return; }
+    if (!_spec.animFrame) _spec.animFrame = requestAnimationFrame(_specDraw);
+  };
+
+  _spec.evtSource.onerror = () => {
+    if (_spec.running) {
+      toast('Spectrogram stream error — is parec installed?', 'error', 5000);
+      _stopSpectrogram();
+      const btn = document.getElementById('btn-spec-toggle');
+      if (btn) btn.textContent = '▶ Start';
+    }
+  };
+}
+
+// Browser captures audio via getUserMedia (used when no location is selected).
+// Headphone monitoring is only available in this mode.
+async function _startBrowserSpectrogram() {
   const deviceId = document.getElementById('spec-device')?.value || null;
   const constraints = { audio: deviceId ? { deviceId: { exact: deviceId } } : true, video: false };
   try {
     _spec.stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-    // Show the actual track label so user can verify the correct mic is captured
     const trackLabel = _spec.stream.getAudioTracks()[0]?.label || '';
     const indicator = document.getElementById('spec-active-label');
     if (indicator) indicator.textContent = trackLabel ? `Using: ${trackLabel}` : '';
 
     _spec.audioCtx = new AudioContext();
     _spec.analyser = _spec.audioCtx.createAnalyser();
-    _spec.analyser.fftSize = 4096;          // 2048 bins → good freq resolution
+    _spec.analyser.fftSize = 4096;
     _spec.analyser.smoothingTimeConstant = 0.4;
     _spec.source = _spec.audioCtx.createMediaStreamSource(_spec.stream);
     _spec.source.connect(_spec.analyser);
-    _spec.freqData = new Uint8Array(_spec.analyser.frequencyBinCount);  // reused every frame
+    _spec.freqData = new Uint8Array(_spec.analyser.frequencyBinCount);
     _spec.monitorGain = null;
     _spec.monitoring = false;
+    _spec.serverMode = false;
 
     const canvas = document.getElementById('spec-canvas');
     canvas.width = canvas.offsetWidth || 1200;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#0d1a10';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    _buildFreqAxis(_spec.audioCtx.sampleRate,
-      document.getElementById('spec-log')?.checked || false);
+    _buildFreqAxis(_spec.audioCtx.sampleRate, document.getElementById('spec-log')?.checked || false);
 
     _spec.running = true;
     _specDraw();
@@ -2490,7 +2541,10 @@ async function _startSpectrogram() {
 
 function _stopSpectrogram() {
   _spec.running = false;
-  if (_spec.animFrame) cancelAnimationFrame(_spec.animFrame);
+  _spec.serverMode = false;
+  _spec.serverData = null;
+  if (_spec.evtSource) { _spec.evtSource.close(); _spec.evtSource = null; }
+  if (_spec.animFrame) { cancelAnimationFrame(_spec.animFrame); _spec.animFrame = null; }
   if (_spec.monitorGain) { _spec.monitorGain.disconnect(); _spec.monitorGain = null; }
   if (_spec.stream) _spec.stream.getTracks().forEach(t => t.stop());
   if (_spec.audioCtx) _spec.audioCtx.close();
@@ -2503,6 +2557,10 @@ function _stopSpectrogram() {
 }
 
 function toggleMonitor() {
+  if (_spec.serverMode) {
+    toast('Headphone monitor is only available with "— any —" location selected', 'warn', 4000);
+    return;
+  }
   if (!_spec.running || !_spec.source) {
     toast('Start the spectrogram first', 'warn');
     return;
@@ -2528,13 +2586,23 @@ function _specDraw() {
   const canvas = document.getElementById('spec-canvas');
   if (!canvas) { _spec.running = false; return; }
   const ctx = canvas.getContext('2d');
-  const analyser = _spec.analyser;
   const logScale = document.getElementById('spec-log')?.checked || false;
 
-  const bins = analyser.frequencyBinCount;   // 2048
-  const data = _spec.freqData || new Uint8Array(bins);
-  analyser.getByteFrequencyData(data);
+  let data;
+  if (_spec.serverMode) {
+    // Server sends a fresh FFT array via SSE; consume it once then wait for next message
+    data = _spec.serverData;
+    _spec.serverData = null;
+    _spec.animFrame = null;  // re-triggered by next SSE message, not rAF loop
+    if (!data) return;
+  } else {
+    const analyser = _spec.analyser;
+    if (!analyser) return;
+    data = _spec.freqData || new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+  }
 
+  const bins = data.length;
   const w = canvas.width;
   const h = canvas.height;
 
@@ -2550,7 +2618,6 @@ function _specDraw() {
   for (let y = 0; y < h; y++) {
     let binIndex;
     if (logScale) {
-      // Logarithmic mapping: maps low frequencies to more vertical space
       const t = 1 - y / h;
       binIndex = Math.floor(Math.pow(bins, t));
       binIndex = Math.min(binIndex, bins - 1);
@@ -2566,7 +2633,7 @@ function _specDraw() {
   }
   ctx.putImageData(col, w - scroll, 0);
 
-  _spec.animFrame = requestAnimationFrame(_specDraw);
+  if (!_spec.serverMode) _spec.animFrame = requestAnimationFrame(_specDraw);
 }
 
 window.toggleSpectrogram = toggleSpectrogram;
