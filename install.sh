@@ -383,6 +383,48 @@ else
   warn "Skipping desktop launcher"
 fi
 
+# ── 8. Kiosk desktop shortcut + autostart ─────────────────────────────────────
+if [ "$INSTALL_DESKTOP" -eq 1 ]; then
+  step "Installing kiosk launcher"
+
+  chmod +x "$INSTALL_DIR/start_kiosk.sh"
+
+  KIOSK_ENTRY="[Desktop Entry]
+Version=1.0
+Type=Application
+Name=BASE — Kiosk
+Comment=Open BASE in full-screen kiosk mode
+Exec=$INSTALL_DIR/start_kiosk.sh
+Icon=$ICON
+Terminal=false
+Categories=Science;Education;
+StartupNotify=true"
+
+  # Desktop shortcut
+  echo "$KIOSK_ENTRY" > "$DESKTOP_DIR/base-kiosk.desktop"
+  if [ -d "$DESKTOP_ON_DESK" ]; then
+    echo "$KIOSK_ENTRY" > "$DESKTOP_ON_DESK/base-kiosk.desktop"
+    chmod +x "$DESKTOP_ON_DESK/base-kiosk.desktop"
+    gio set "$DESKTOP_ON_DESK/base-kiosk.desktop" metadata::trusted true 2>/dev/null || true
+  fi
+
+  # Autostart on login — browser opens automatically after desktop loads
+  AUTOSTART_DIR="$HOME/.config/autostart"
+  mkdir -p "$AUTOSTART_DIR"
+  cat > "$AUTOSTART_DIR/base-kiosk.desktop" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=BASE — Kiosk
+Comment=Open BASE in full-screen kiosk mode on login
+Exec=$INSTALL_DIR/start_kiosk.sh
+Terminal=false
+X-GNOME-Autostart-enabled=true
+EOF
+
+  ok "Kiosk shortcut on Desktop + autostart on login enabled"
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
