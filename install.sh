@@ -183,13 +183,16 @@ if [ "$INSTALL_SYSTEM_PACKAGES" -eq 0 ]; then
   warn "Skipping system package installation"
 elif ! command -v apt-get &>/dev/null; then
   warn "apt-get not found. Install these packages manually if audio dependencies fail: ${PKGS[*]:-none}"
-elif [ "${#PKGS[@]}" -gt 0 ]; then
-  warn "Installing system packages (requires sudo): ${PKGS[*]}"
-  sudo apt-get update -qq
-  sudo apt-get install -y "${PKGS[@]}"
-  ok "System packages installed"
 else
-  ok "All system libraries present"
+  info "Updating package lists…"
+  sudo apt-get update -qq
+  if [ "${#PKGS[@]}" -gt 0 ]; then
+    info "Installing: ${PKGS[*]}"
+    sudo apt-get install -y "${PKGS[@]}"
+    ok "System packages installed"
+  else
+    ok "All system libraries present"
+  fi
 fi
 
 # ── 2. Python virtual environment ─────────────────────────────────────────────

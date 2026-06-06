@@ -87,61 +87,35 @@ def summary_report(
     date_from = date_from or (date.today() - timedelta(days=7)).strftime("%Y-%m-%d")
     date_to = date_to or date.today().strftime("%Y-%m-%d")
 
-    # When filtering by species, read detections.csv (has species_common per row)
-    # Otherwise read sessions.csv for aggregated daily totals
-    if species or classifier or location:
-        by_date: dict[str, dict] = {}
-        if det_path.exists():
-            with open(det_path) as f:
-                for row in csv.DictReader(f):
-                    if species and row.get("species_common", "") != species:
-                        continue
-                    if classifier and row.get("classifier", "") != classifier:
-                        continue
-                    if location and location not in (row.get("location_name", ""), row.get("monitoring_location", "")):
-                        continue
-                    d = row.get("date", "")
-                    if not (date_from <= d <= date_to):
-                        continue
-                    if d not in by_date:
-                        by_date[d] = {"date": d, "sessions": set(), "species": set(), "total_calls": 0}
-                    by_date[d]["sessions"].add(row.get("session_id", ""))
-                    by_date[d]["species"].add(row.get("species_common", ""))
-                    by_date[d]["total_calls"] += 1
-        rows = []
-        for d, data in sorted(by_date.items()):
-            rows.append({
-                "date": d,
-                "sessions": len(data["sessions"]),
-                "species_count": len(data["species"]),
-                "total_calls": data["total_calls"],
-            })
-    else:
-        by_date = {}
-        if sess_path.exists():
-            with open(sess_path) as f:
-                for row in csv.DictReader(f):
-                    d = row.get("date", "")
-                    if not (date_from <= d <= date_to):
-                        continue
-                    if location and location not in (row.get("location_name", ""), row.get("monitoring_location", "")):
-                        continue
-                    if d not in by_date:
-                        by_date[d] = {"date": d, "sessions": 0, "species_set": set(), "total_calls": 0}
-                    by_date[d]["sessions"] += 1
-                    by_date[d]["species_set"].add(row.get("species", ""))
-                    try:
-                        by_date[d]["total_calls"] += int(row.get("total_calls", 0))
-                    except (ValueError, TypeError):
-                        pass
-        rows = []
-        for d, data in sorted(by_date.items()):
-            rows.append({
-                "date": d,
-                "sessions": data["sessions"],
-                "species_count": len(data["species_set"]),
-                "total_calls": data["total_calls"],
-            })
+    # Always read from detections.csv — it is updated in real-time as detections arrive,
+    # whereas sessions.csv is only written when a session ends, so active sessions would
+    # be invisible in the "All locations" view until recording stops.
+    by_date: dict[str, dict] = {}
+    if det_path.exists():
+        with open(det_path) as f:
+            for row in csv.DictReader(f):
+                if species and row.get("species_common", "") != species:
+                    continue
+                if classifier and row.get("classifier", "") != classifier:
+                    continue
+                if location and location not in (row.get("location_name", ""), row.get("monitoring_location", "")):
+                    continue
+                d = row.get("date", "")
+                if not (date_from <= d <= date_to):
+                    continue
+                if d not in by_date:
+                    by_date[d] = {"date": d, "sessions": set(), "species": set(), "total_calls": 0}
+                by_date[d]["sessions"].add(row.get("session_id", ""))
+                by_date[d]["species"].add(row.get("species_common", ""))
+                by_date[d]["total_calls"] += 1
+    rows = []
+    for d, data in sorted(by_date.items()):
+        rows.append({
+            "date": d,
+            "sessions": len(data["sessions"]),
+            "species_count": len(data["species"]),
+            "total_calls": data["total_calls"],
+        })
 
     return {
         "date_from": date_from,
