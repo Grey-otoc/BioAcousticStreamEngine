@@ -2269,8 +2269,8 @@ async function _populateSpecDevices() {
     const devSel = document.getElementById('spec-device');
     if (!locSel || !devSel) return;
 
-    const prevLocVal  = locSel.value || '';
-    const prevDevId   = devSel.value || '';
+    const prevLocVal = locSel.value || '';
+    const prevDevId  = devSel.value || '';
 
     const [mics, browserDevices] = await Promise.all([
       api.get('/api/settings/mics').catch(() => []),
@@ -2283,43 +2283,52 @@ async function _populateSpecDevices() {
     for (const mic of (mics || [])) {
       if (!mic.device) continue;
       const opt = document.createElement('option');
-      opt.value            = mic.device;   // PipeWire source name (used for matching)
-      opt.dataset.micName  = mic.name;
-      opt.textContent      = mic.name;
+      opt.value           = mic.device;  // PipeWire source name
+      opt.dataset.micName = mic.name;
+      opt.textContent     = mic.name;
       locSel.appendChild(opt);
     }
 
-    // Mic dropdown — every browser audio input shown by its real label
-    devSel.innerHTML = '<option value="">System default</option>';
-    for (const d of browserDevices) {
-      const opt = document.createElement('option');
-      opt.value       = d.deviceId;
-      opt.textContent = d.label || d.deviceId;
-      devSel.appendChild(opt);
-    }
-
-    // Restore previous selections; fall back to auto-suggest if device no longer present
+    // Restore location selection, then populate Mic dropdown filtered to that location
     if (prevLocVal) locSel.value = prevLocVal;
-    if (prevDevId && [...devSel.options].some(o => o.value === prevDevId)) {
-      devSel.value = prevDevId;
-    } else if (locSel.value) {
-      _suggestDeviceForLocation(locSel.value, browserDevices, devSel);
-    }
+    _fillMicDropdown(locSel.value, browserDevices, devSel, prevDevId);
   } catch (e) {
     console.warn('Spectrogram device list:', e);
   }
 }
 
-// Suggest the best-matching browser device for a PipeWire source name.
-// Only a hint — the user can always change the Mic dropdown manually.
-function _suggestDeviceForLocation(pipewireSource, browserDevices, devSel) {
-  const suggested = _matchBrowserDevice(pipewireSource, browserDevices);
-  if (suggested) devSel.value = suggested;
+// Fill the Mic dropdown with devices linked to the selected location.
+// If the location has one clear match it is auto-selected; two identical
+// devices that tie are both shown so the user can pick; no location selected
+// or no match found → show all available devices.
+function _fillMicDropdown(pipewireSource, browserDevices, devSel, preferDeviceId) {
+  const candidates = pipewireSource
+    ? _candidatesForSource(pipewireSource, browserDevices)
+    : browserDevices;  // no location → show everything
+
+  // Fall back to showing all devices if nothing matched
+  const list = candidates.length ? candidates : browserDevices;
+
+  devSel.innerHTML = '<option value="">System default</option>';
+  for (const d of list) {
+    const opt = document.createElement('option');
+    opt.value       = d.deviceId;
+    opt.textContent = d.label || d.deviceId;
+    devSel.appendChild(opt);
+  }
+
+  // Restore previous selection if it is still in the list; otherwise auto-select
+  if (preferDeviceId && [...devSel.options].some(o => o.value === preferDeviceId)) {
+    devSel.value = preferDeviceId;
+  } else if (list.length === 1) {
+    devSel.value = list[0].deviceId;  // exactly one candidate — select it automatically
+  }
 }
 
-// Heuristic: extract distinctive tokens from a PipeWire source name and score
-// them against browser device labels. Bus-type affinity breaks remaining ties.
-function _matchBrowserDevice(pipewireSource, browserDevices) {
+// Return all browser devices that score highest against a PipeWire source name.
+// Returns multiple entries when devices are identical-model (same label, equal score)
+// so the user can choose; returns [] when no device scores above zero.
+function _candidatesForSource(pipewireSource, browserDevices) {
   const src = pipewireSource.toLowerCase();
   const GENERIC = new Set([
     'alsa', 'input', 'output', 'fallback', 'info',
@@ -2338,31 +2347,31 @@ function _matchBrowserDevice(pipewireSource, browserDevices) {
   const isPci = src.includes('.pci-');
   const isUsb = src.includes('.usb-');
 
-  let bestId = null, bestScore = 0;
-  for (const d of browserDevices) {
+  let maxScore = 0;
+  const scored = browserDevices.map(d => {
     const label = (d.label || '').toLowerCase();
     let score = keywords.filter(w => label.includes(w)).length;
     if (isPci && (label.includes('built') || label.includes('internal'))) score += 0.5;
-    // USB affinity only kicks in when there are distinctive keywords — never used alone
     if (isUsb && keywords.length > 0 && label.includes('usb')) score += 0.5;
-    if (score > bestScore) { bestScore = score; bestId = d.deviceId; }
-  }
-  return bestScore > 0 ? bestId : null;
+    if (score > maxScore) maxScore = score;
+    return { d, score };
+  });
+
+  if (maxScore === 0) return [];
+  return scored.filter(({ score }) => score === maxScore).map(({ d }) => d);
 }
 
-// When the user picks a monitoring location, suggest the matching Mic and switch.
+// When the user picks a monitoring location, repopulate the Mic dropdown
+// to show only that location's linked devices, then restart if running.
 async function onSpecLocationChange() {
   const locSel = document.getElementById('spec-location');
   const devSel = document.getElementById('spec-device');
   if (!locSel || !devSel) return;
 
-  if (locSel.value) {
-    const browserDevices = await navigator.mediaDevices.enumerateDevices()
-      .then(ds => ds.filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default'));
-    _suggestDeviceForLocation(locSel.value, browserDevices, devSel);
-  } else {
-    devSel.value = '';
-  }
+  const browserDevices = await navigator.mediaDevices.enumerateDevices()
+    .then(ds => ds.filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default'));
+
+  _fillMicDropdown(locSel.value, browserDevices, devSel, '');
 
   if (_spec.running) {
     const wasMonitoring = _spec.monitoring;
