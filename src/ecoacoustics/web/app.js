@@ -10,6 +10,7 @@ const CLASSIFIERS = [
   { key: 'bee',    label: 'Bees',     icon: '🐝' },
   { key: 'insect', label: 'Insects',  icon: '🦗' },
   { key: 'soil',   label: 'Soil',     icon: '🌱' },
+  { key: 'water',  label: 'Water',    icon: '💧' },
 ];
 
 const state = {
@@ -262,8 +263,8 @@ function renderDashboard() {
           </div>
           <div class="spec-panel show" id="spec-panel">
             <div class="spec-toolbar">
-              <label>Mic</label>
-              <select id="spec-device" onchange="changeSpecDevice()"><option value="">Default microphone</option></select>
+              <label>Location</label>
+              <select id="spec-device" onchange="changeSpecDevice()"><option value="">System default</option></select>
               <label><input type="checkbox" id="spec-log" style="accent-color:var(--primary)"> Log scale</label>
             </div>
             <div class="spec-wrap">
@@ -965,6 +966,7 @@ const _CLF_META = {
   bee:    { icon: '🐝', label: 'Bees',     note: 'Standard microphone (16kHz) — BuzzDetect v1.0.1' },
   insect: { icon: '🦗', label: 'Insects',  note: 'Standard microphone (44.1kHz) — grasshoppers, bush crickets' },
   soil:   { icon: '🌱', label: 'Soil',     note: 'Surface / contact microphone (22kHz) — Soil Acoustic Index (beta)' },
+  water:  { icon: '💧', label: 'Water',    note: 'Submersible hydrophone (44.1kHz) — Water Acoustic Index (beta)' },
 };
 
 async function loadClassifierDevices() {
@@ -984,7 +986,7 @@ async function loadClassifierDevices() {
       return none + opts;
     };
 
-    panel.innerHTML = ['bird', 'bat', 'bee', 'insect', 'soil'].map(key => {
+    panel.innerHTML = ['bird', 'bat', 'bee', 'insect', 'soil', 'water'].map(key => {
       const meta = _CLF_META[key];
       const isActive = clfData.active.includes(key);
       const assignedDevice = clfData.devices[key];
@@ -1021,11 +1023,11 @@ async function loadClassifierDevices() {
 async function saveClassifiers() {
   const btn = document.getElementById('btn-save-classifiers');
   if (btn) btnLoad(btn, '⟳ Saving...');
-  const active = ['bird', 'bat', 'bee', 'insect', 'soil'].filter(k =>
+  const active = ['bird', 'bat', 'bee', 'insect', 'soil', 'water'].filter(k =>
     document.getElementById(`clf-active-${k}`)?.checked
   );
   const devices = {};
-  for (const key of ['bird', 'bat', 'bee', 'insect', 'soil']) {
+  for (const key of ['bird', 'bat', 'bee', 'insect', 'soil', 'water']) {
     const val = document.getElementById(`clf-device-${key}`)?.value;
     devices[key] = val === '' ? null : val;
   }
@@ -1079,7 +1081,7 @@ async function loadMicClfPanel() {
         <option value="">System default</option>${deviceOpts}
       </select>`;
 
-      const clfBoxes = ['bird','bat','bee','insect','soil'].map(clf => {
+      const clfBoxes = ['bird','bat','bee','insect','soil','water'].map(clf => {
         const m = _CLF_META[clf];
         const checked = activeClfs.includes(clf) ? 'checked' : '';
         return `<label style="display:flex;align-items:center;gap:4px;font-size:0.78rem;cursor:pointer;white-space:nowrap">
@@ -2038,6 +2040,7 @@ const HELP = {
       <li><strong>🐝 Bees</strong> — BuzzDetect v1.0.1 (OSU Bee Lab). Detects insect flight buzz at 16 kHz. Standard microphone.</li>
       <li><strong>🦗 Insects</strong> — OrthopterOSS (coming). Grasshoppers and bush crickets, 2–20 kHz.</li>
       <li><strong>🌱 Soil</strong> — Blenheim Innovation. Soil Acoustic Index (beta) — worm movement, root activity, 50–2000 Hz. Best with a contact/geophone microphone.</li>
+      <li><strong>💧 Water</strong> — Blenheim Innovation. Water Acoustic Index (beta) — fish calls, invertebrate activity, 300–5000 Hz. Requires a submersible hydrophone.</li>
     </ul>
     <p>Each classifier can be assigned a <strong>different microphone</strong>. This means a bat ultrasonic mic and a standard bird mic can record simultaneously from different devices.</p>`
   },
@@ -2072,6 +2075,18 @@ const HELP = {
       <li><strong>Spectral entropy</strong> — biological broadband activity spreads energy across many frequencies (high entropy); monotone mechanical noise concentrates it (low entropy).</li>
     </ul>
     <p><em>This is a beta feature.</em> The thresholds have not been calibrated against labelled soil recordings from Blenheim — treat SAI values as indicative and useful for relative comparison across time, not as absolute measurements.</p>`
+  },
+  wai: {
+    icon: '💧', title: 'Water Acoustic Index (WAI)',
+    body: `<p>The Water Acoustic Index (WAI) is a <strong>beta measure of biological activity in water</strong>, derived from audio captured by a submersible hydrophone. Designed for the Great Lake at Blenheim Palace.</p>
+    <p>The WAI uses a multiplicative three-term score — all three must be high for a high WAI, making it robust to individual noise artefacts:</p>
+    <ul style="padding-left:16px;margin:8px 0">
+      <li><strong>Normalised Difference Water Index (NDWI)</strong> — compares power in the biological band (300–5000 Hz, fish calls and invertebrates) against the anthropogenic band (10–200 Hz, boat motors and flow noise). A high NDWI means the energy is biological, not mechanical.</li>
+      <li><strong>Bio-band RMS energy</strong> — the raw signal strength in the biological frequency range. Scales with the intensity of underwater activity.</li>
+      <li><strong>Acoustic Complexity Index (ACI)</strong> — fish choruses and invertebrate clicks are temporally varied; steady flow noise and motor drone are monotone. ACI is high for complex, changing signals and low for steady background noise.</li>
+    </ul>
+    <p>Mains hum (50, 100, 150, 200 Hz) is notched out before analysis to remove electrical interference from hydrophone cables.</p>
+    <p><em>This is a beta feature</em> tuned for freshwater lakes. Thresholds and frequency bands should be calibrated against recordings from the specific deployment site and depth.</p>`
   },
   mqtt: {
     icon: '📡', title: 'MQTT Live Feed',
@@ -2177,10 +2192,10 @@ function _buildFreqAxis(sampleRate, logScale) {
     .join('');
 }
 
-// Populate the spectrogram mic dropdown using browser deviceIds from enumerateDevices().
-// Browser deviceIds are the only values getUserMedia accepts reliably — PipeWire source
-// names look similar but are a different identifier space and getUserMedia ignores them,
-// causing the spectrogram to silently fall back to the system default on every switch.
+// Populate the spectrogram location dropdown from monitoring locations in settings.
+// Each location that has a device assigned is matched to a browser deviceId so that
+// getUserMedia can target it — browser deviceIds are the only reliable identifier
+// for getUserMedia; PipeWire source names are matched via label keyword heuristics.
 async function _populateSpecDevices() {
   try {
     // One-time getUserMedia call to unlock real device labels (browser security requirement)
@@ -2189,45 +2204,83 @@ async function _populateSpecDevices() {
 
     const sel = document.getElementById('spec-device');
     if (!sel) return;
-    const prev = sel.value;
+    const prevMicName = sel.options[sel.selectedIndex]?.dataset.micName || '';
     sel.innerHTML = '<option value="">System default</option>';
 
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    devices
-      .filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default')
-      .forEach(d => {
-        const opt = document.createElement('option');
-        opt.value    = d.deviceId;          // browser deviceId — works with getUserMedia
-        opt.dataset.label = d.label || '';  // stored for sync matching
-        opt.textContent   = d.label || `Microphone (${d.deviceId.slice(0, 8)})`;
-        sel.appendChild(opt);
-      });
+    // Fetch monitoring locations and browser devices in parallel
+    const [mics, browserDevices] = await Promise.all([
+      api.get('/api/settings/mics').catch(() => []),
+      navigator.mediaDevices.enumerateDevices()
+        .then(ds => ds.filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default')),
+    ]);
 
-    // Restore previous selection if the same deviceId is still present
-    if (prev && sel.querySelector(`option[value="${CSS.escape(prev)}"]`)) sel.value = prev;
+    for (const mic of (mics || [])) {
+      if (!mic.device) continue;   // location not yet assigned a physical device
+      const deviceId = _matchBrowserDevice(mic.device, browserDevices);
+      const opt = document.createElement('option');
+      opt.dataset.micName       = mic.name;
+      opt.dataset.pipewireDevice = mic.device;
+      if (deviceId) {
+        opt.value       = deviceId;
+        opt.textContent = mic.name;
+      } else {
+        opt.value       = '';
+        opt.textContent = `${mic.name} (device not found)`;
+        opt.disabled    = true;
+      }
+      sel.appendChild(opt);
+    }
+
+    // Restore previous selection by monitoring location name
+    if (prevMicName) {
+      const match = [...sel.options].find(o => o.dataset.micName === prevMicName && !o.disabled);
+      if (match) sel.value = match.value;
+    }
   } catch (e) {
     console.warn('Spectrogram device list:', e);
   }
 }
 
-// Sync the spectrogram mic to the running pipeline when exactly one mic is active.
-// Matches the pipeline's device_name against browser device labels by shared keywords.
-// Does nothing when multiple mics are running — user must choose manually.
+// Match a PipeWire source name to a browser deviceId by extracting meaningful keywords
+// from the source name and scoring them against browser device labels.
+function _matchBrowserDevice(pipewireSource, browserDevices) {
+  // Only strip truly non-descriptive structural tokens; keep words like analog/stereo/mono
+  // because they appear in browser labels and distinguish between multiple built-in devices.
+  const GENERIC = new Set(['alsa', 'input', 'output', 'fallback', 'info', 'usb']);
+  const keywords = pipewireSource.toLowerCase()
+    .replace(/[_\-.]/g, ' ')
+    .split(/\s+/)
+    .filter(w =>
+      w.length >= 3 &&
+      !/^\d+$/.test(w) &&           // pure digit strings
+      !/^[0-9a-f]{4,}$/.test(w) &&  // hex identifiers (serial numbers etc.)
+      !GENERIC.has(w)
+    );
+
+  if (!keywords.length) return null;
+
+  let bestId = null, bestScore = 0;
+  for (const d of browserDevices) {
+    const label = (d.label || '').toLowerCase();
+    const score = keywords.filter(w => label.includes(w)).length;
+    if (score > bestScore) { bestScore = score; bestId = d.deviceId; }
+  }
+  return bestScore > 0 ? bestId : null;
+}
+
+// Sync the spectrogram to the running pipeline when exactly one mic is active.
+// Matches by monitoring location name (data-mic-name) against pipeline device_name.
 function _syncSpecToRunningDevice() {
   const sel = document.getElementById('spec-device');
   if (!sel || !state.status) return;
   const running = Object.values(state.status.pipelines || {})
     .filter(p => p.state !== 'idle' && p.device_name);
-  if (running.length !== 1) return;  // ambiguous with multiple mics — don't guess
+  if (running.length !== 1) return;  // ambiguous — user must choose manually
 
-  // Strip the "USB Mic — " prefix added by our friendly-name formatter
-  const target = running[0].device_name.toLowerCase().replace(/^usb mic\s*[—\-]\s*/i, '');
-  const keywords = target.split(/\W+/).filter(w => w.length >= 3);
-
+  const targetName = running[0].device_name;
   for (const opt of sel.options) {
-    if (!opt.value) continue;
-    const label = (opt.dataset.label || opt.textContent).toLowerCase();
-    if (keywords.some(w => label.includes(w))) {
+    if (!opt.value || opt.disabled) continue;
+    if (opt.dataset.micName === targetName) {
       if (sel.value === opt.value) return;
       sel.value = opt.value;
       if (_spec.running) { _stopSpectrogram(); _startSpectrogram(); }
@@ -2238,8 +2291,10 @@ function _syncSpecToRunningDevice() {
 
 async function changeSpecDevice() {
   if (!_spec.running) return;
+  const wasMonitoring = _spec.monitoring;
   _stopSpectrogram();
   await _startSpectrogram();
+  if (wasMonitoring) toggleMonitor();
 }
 
 async function toggleSpectrogram() {

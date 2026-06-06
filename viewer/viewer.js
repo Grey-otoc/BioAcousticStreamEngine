@@ -884,6 +884,29 @@ async function init() {
 
   const s = loadSettings();
   if (s.autoConnect && s.brokerUrl) connect();
+
+  // Re-establish MQTT when the user returns to the tab/PWA after it was backgrounded.
+  // On iOS the WebSocket is always dropped when the app is suspended — these handlers
+  // trigger an immediate reconnect the moment the page becomes visible again.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') _ensureConnected();
+  });
+  // Page Lifecycle API — fires when a frozen page is thawed (Android, desktop)
+  window.addEventListener('resume', _ensureConnected);
+  // Back-forward cache restore (iOS Safari, Firefox)
+  window.addEventListener('pageshow', (e) => { if (e.persisted) _ensureConnected(); });
+  // Network restored after going offline
+  window.addEventListener('online', _ensureConnected);
+}
+
+// Reconnect MQTT if the client is gone or has stopped trying.
+// Safe to call repeatedly — does nothing when already connected.
+function _ensureConnected() {
+  const s = loadSettings();
+  if (!s.autoConnect || !s.brokerUrl) return;
+  if (!mqttClient || (!mqttClient.connected && !mqttClient.reconnecting)) {
+    connect();
+  }
 }
 
 document.addEventListener('DOMContentLoaded', init);

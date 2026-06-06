@@ -251,5 +251,10 @@
   <img id="brand-watermark" src="assets/base-logo.png" alt="">
   <script src="mqtt.min.js"></script>
   <script src="viewer.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+    }
+  </script>
 </body>
 </html>

@@ -14,6 +14,7 @@ from ecoacoustics.classifiers.bat import BatClassifier
 from ecoacoustics.classifiers.bee import BeeClassifier
 from ecoacoustics.classifiers.insect import InsectClassifier
 from ecoacoustics.classifiers.soil import SoilClassifier
+from ecoacoustics.classifiers.water import WaterClassifier
 
 REGISTRY: dict[str, type[BaseClassifier]] = {
     "bird": BirdClassifier,
@@ -21,6 +22,7 @@ REGISTRY: dict[str, type[BaseClassifier]] = {
     "bee": BeeClassifier,
     "insect": InsectClassifier,    # stub — grasshoppers, bush crickets (2–20 kHz)
     "soil": SoilClassifier,
+    "water": WaterClassifier,
 }
 
 __all__ = [
@@ -31,5 +33,6 @@ __all__ = [
     "BeeClassifier",
     "InsectClassifier",
     "SoilClassifier",
+    "WaterClassifier",
     "REGISTRY",
 ]
