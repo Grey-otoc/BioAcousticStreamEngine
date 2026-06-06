@@ -1930,14 +1930,70 @@ function renderMicsRows(mics) {
     el.innerHTML = '<p style="font-size:0.82rem;color:var(--muted);margin-bottom:8px">No locations configured yet.</p>';
     return;
   }
-  el.innerHTML = mics.map((m, i) => `
-    <div class="device-row" style="margin-bottom:6px">
+  el.innerHTML = mics.map((m, i) => _micViewRow(m, i)).join('');
+}
+
+function _micViewRow(m, i) {
+  return `
+    <div class="device-row" id="mic-row-view-${i}" style="margin-bottom:6px">
       <div class="device-info">
         <div class="device-name">${escHtml(m.name)}</div>
         <div class="device-meta">${m.latitude}, ${m.longitude}</div>
       </div>
-      <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteMicRow(${i})">Remove</button>
-    </div>`).join('');
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-outline btn-sm" onclick="showMicEditForm(${i})">Edit</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger)" onclick="deleteMicRow(${i})">Remove</button>
+      </div>
+    </div>
+    <div id="mic-row-edit-${i}" style="display:none;margin-bottom:10px;padding:10px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)">
+      <div class="form-row" style="margin-bottom:8px">
+        <div class="form-group" style="flex:2;margin:0 6px 0 0">
+          <label style="font-size:0.78rem">Name</label>
+          <input type="text" id="mic-e-name-${i}" value="${escHtml(m.name)}" style="font-size:0.82rem;padding:5px 8px">
+        </div>
+        <div class="form-group" style="margin:0 6px 0 0">
+          <label style="font-size:0.78rem">Latitude</label>
+          <input type="number" id="mic-e-lat-${i}" value="${m.latitude}" step="0.0001" style="width:120px;font-size:0.82rem;padding:5px 8px">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label style="font-size:0.78rem">Longitude</label>
+          <input type="number" id="mic-e-lon-${i}" value="${m.longitude}" step="0.0001" style="width:120px;font-size:0.82rem;padding:5px 8px">
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary btn-sm" id="mic-e-save-${i}" onclick="saveMicEdit(${i})">Save</button>
+        <button class="btn btn-outline btn-sm" onclick="hideMicEditForm(${i})">Cancel</button>
+      </div>
+    </div>`;
+}
+
+function showMicEditForm(i) {
+  document.getElementById(`mic-row-view-${i}`).style.display = 'none';
+  document.getElementById(`mic-row-edit-${i}`).style.display = '';
+  document.getElementById(`mic-e-name-${i}`).focus();
+}
+
+function hideMicEditForm(i) {
+  document.getElementById(`mic-row-edit-${i}`).style.display = 'none';
+  document.getElementById(`mic-row-view-${i}`).style.display = '';
+}
+
+async function saveMicEdit(i) {
+  const name = document.getElementById(`mic-e-name-${i}`).value.trim();
+  const lat  = parseFloat(document.getElementById(`mic-e-lat-${i}`).value);
+  const lon  = parseFloat(document.getElementById(`mic-e-lon-${i}`).value);
+  if (!name) { toast('Name is required', 'warn'); return; }
+  if (isNaN(lat) || isNaN(lon)) { toast('Valid latitude and longitude required', 'warn'); return; }
+  const btn = document.getElementById(`mic-e-save-${i}`);
+  btnLoad(btn, '⟳');
+  try {
+    await api.patch(`/api/settings/mics/${i}`, { name, latitude: lat, longitude: lon });
+    renderMicsRows(await api.get('/api/settings/mics'));
+    toast('Location updated', 'success', 2000);
+  } catch (err) {
+    toast(`Could not save: ${err.message}`, 'error', 5000);
+    btnDone(btn);
+  }
 }
 
 async function deleteMicRow(i) {
@@ -2113,7 +2169,7 @@ const HELP = {
   location: {
     icon: '📍', title: 'Site Name',
     body: `<p>The site name, latitude, and longitude identify the overall recording site — published as <code>site_name</code> in every detection record, CSV export, and MQTT payload.</p>
-    <p><strong>Site Name vs Monitoring Locations:</strong> Site Name is the top-level label for the whole deployment (e.g. "Weaveley Solar"). Monitoring Locations are the individual microphone positions within that site (e.g. "South Control", "North Meadow") — configured separately below.</p>
+    <p><strong>Site Name vs Monitoring Locations:</strong> Site Name is the top-level label for the whole deployment (e.g. "Blenheim Estate"). Monitoring Locations are the individual microphone positions within that site (e.g. "South Control", "North Meadow") — configured separately below.</p>
     <p><strong>Why it matters:</strong></p>
     <ul style="padding-left:16px;margin:8px 0">
       <li>BirdNET uses the coordinates to apply a <strong>regional species filter</strong>, improving accuracy for your location and season.</li>
@@ -2439,3 +2495,10 @@ window.startDevice = startDevice;
 window.stopDevice = stopDevice;
 window.setFilter = setFilter;
 window.changeSpecDevice = changeSpecDevice;
+window.showMicEditForm = showMicEditForm;
+window.hideMicEditForm = hideMicEditForm;
+window.saveMicEdit = saveMicEdit;
+window.deleteMicRow = deleteMicRow;
+window.showMicAddForm = showMicAddForm;
+window.hideMicAddForm = hideMicAddForm;
+window.confirmAddMic = confirmAddMic;

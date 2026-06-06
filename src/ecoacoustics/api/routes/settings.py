@@ -239,7 +239,7 @@ def update_mic(index: int, body: dict = Body(...)):
     if index < 0 or index >= len(mics):
         from fastapi import HTTPException
         raise HTTPException(404, f"Mic index {index} out of range")
-    allowed = {"device", "classifiers", "schedule"}
+    allowed = {"name", "latitude", "longitude", "device", "classifiers", "schedule"}
     for k, v in body.items():
         if k in allowed:
             mics[index][k] = v
