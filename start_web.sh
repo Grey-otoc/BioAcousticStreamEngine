@@ -22,6 +22,11 @@ if [ ! -f "config/secrets.yaml" ]; then
   [ -f "config/secrets.yaml.example" ] && cp config/secrets.yaml.example config/secrets.yaml
 fi
 
+# Create autostart.yaml if missing (records whether to resume on next boot).
+if [ ! -f "config/autostart.yaml" ]; then
+  echo "enabled: false" > config/autostart.yaml
+fi
+
 # Stop any existing BASE process before starting so we never hit "address already in use".
 # The systemd service (installed by install.sh) must be stopped first — pkill alone won't
 # work because systemd immediately restarts the process after it is killed.

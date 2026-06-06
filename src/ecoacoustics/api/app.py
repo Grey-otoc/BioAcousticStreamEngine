@@ -75,8 +75,9 @@ def get_or_create_pipeline(device_key: str, device_index=None, device_name: str 
     return state.pipeline_instances[device_key]
 
 
-def _maybe_autostart(mgr) -> None:
-    """Resume recording after boot or power cut if the user had started a session."""
+async def _delayed_autostart(mgr, delay_secs: int = 8) -> None:
+    """Resume recording after boot. Delays to let audio drivers finish initialising."""
+    await asyncio.sleep(delay_secs)
     if not _AUTOSTART.exists():
         return
     try:
@@ -84,14 +85,13 @@ def _maybe_autostart(mgr) -> None:
             a_cfg = yaml.safe_load(f) or {}
         if not a_cfg.get("enabled", False):
             return
-        # If any mics have classifiers configured, start them all; otherwise use default.
         with open(CONFIG_PATH) as f:
             settings = yaml.safe_load(f) or {}
         mics_with_clfs = [m for m in (settings.get("mics") or []) if m.get("classifiers")]
         if mics_with_clfs:
             from ecoacoustics.api.routes.status import start_mics
             _log.info("Autostart: resuming %d configured monitoring locations", len(mics_with_clfs))
-            start_mics(mode="schedule")
+            start_mics()
         else:
             _log.info("Autostart: resuming default schedule recording")
             mgr.start_schedule()
@@ -110,7 +110,7 @@ async def lifespan(app: FastAPI):
     mgr.set_async_context(loop, _broadcast_queue)
     task = asyncio.create_task(_broadcast_loop())
     hb_task = asyncio.create_task(heartbeat_loop(CONFIG_PATH))
-    _maybe_autostart(mgr)
+    asyncio.create_task(_delayed_autostart(mgr))
     yield
     task.cancel()
     hb_task.cancel()

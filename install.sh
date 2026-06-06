@@ -281,6 +281,13 @@ else
   ok "config/secrets.yaml exists"
 fi
 
+if [ ! -f "config/autostart.yaml" ]; then
+  echo "enabled: false" > config/autostart.yaml
+  ok "Created config/autostart.yaml (recording will resume on boot once you press Start)"
+else
+  ok "config/autostart.yaml exists"
+fi
+
 if [ "$INSTALL_SERVICE" -eq 1 ]; then
   # ── 6. Systemd service (autostart on boot) ─────────────────────────────────
   step "Installing systemd service"
@@ -295,11 +302,13 @@ if [ "$INSTALL_SERVICE" -eq 1 ]; then
     cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=BioAcoustic Stream Engine — web UI
-After=network.target
+After=network.target sound.target
 
 [Service]
 Type=simple
 WorkingDirectory=$INSTALL_DIR
+# Short delay lets PipeWire/PulseAudio finish initialising before audio capture starts.
+ExecStartPre=/bin/sleep 5
 ExecStart=$INSTALL_DIR/.venv/bin/python -m ecoacoustics.main web --no-browser
 Restart=always
 RestartSec=10
@@ -334,13 +343,13 @@ if [ "$INSTALL_DESKTOP" -eq 1 ]; then
   step "Installing desktop launcher"
 
   DESKTOP_DIR="$HOME/.local/share/applications"
+  DESKTOP_ON_DESK="$HOME/Desktop"
   mkdir -p "$DESKTOP_DIR"
 
   ICON=""
   [ -f "$INSTALL_DIR/viewer/assets/base-logo.png" ] && ICON="$INSTALL_DIR/viewer/assets/base-logo.png"
 
-  cat > "$DESKTOP_DIR/bioacoustic-stream-engine.desktop" <<EOF
-[Desktop Entry]
+  DESKTOP_ENTRY="[Desktop Entry]
 Version=1.0
 Type=Application
 Name=BioAcoustic Stream Engine (BASE)
@@ -349,8 +358,18 @@ Exec=$INSTALL_DIR/start_web.sh
 Icon=$ICON
 Terminal=false
 Categories=Science;Education;
-StartupNotify=true
-EOF
+StartupNotify=true"
+
+  echo "$DESKTOP_ENTRY" > "$DESKTOP_DIR/bioacoustic-stream-engine.desktop"
+
+  # Put a copy on the Desktop so there's a visible icon after install
+  if [ -d "$DESKTOP_ON_DESK" ]; then
+    echo "$DESKTOP_ENTRY" > "$DESKTOP_ON_DESK/bioacoustic-stream-engine.desktop"
+    chmod +x "$DESKTOP_ON_DESK/bioacoustic-stream-engine.desktop"
+    # Mark trusted so GNOME shows it as launchable (not as a text file)
+    gio set "$DESKTOP_ON_DESK/bioacoustic-stream-engine.desktop" \
+      metadata::trusted true 2>/dev/null || true
+  fi
 
   # Also update the repo's .desktop file so it works for the current user
   sed -i "s|^Exec=.*|Exec=$INSTALL_DIR/start_web.sh|" \
