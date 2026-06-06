@@ -1465,6 +1465,7 @@ async function renderReports() {
   document.getElementById('r-type').addEventListener('change', refreshReportSpecies);
 
   await Promise.all([refreshReportSpecies(), refreshReportLocations()]);
+  loadReport();
 }
 
 async function refreshReportSpecies() {
