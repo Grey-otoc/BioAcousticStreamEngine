@@ -39,15 +39,16 @@ def list_locations():
             if name and mic.get("classifiers"):
                 locations.add(name)
 
-    # Secondary: historical values already in the CSV (catches renamed/removed locations)
-    det_path, _ = _paths()
-    if det_path.exists():
-        with open(det_path) as f:
+    # Secondary: historical monitoring_location values from both CSVs
+    det_path, sess_path = _paths()
+    for path in (det_path, sess_path):
+        if not path.exists():
+            continue
+        with open(path) as f:
             for row in csv.DictReader(f):
-                for field in ("monitoring_location",):
-                    loc = row.get(field, "").strip()
-                    if loc:
-                        locations.add(loc)
+                loc = row.get("monitoring_location", "").strip()
+                if loc:
+                    locations.add(loc)
 
     return {"locations": sorted(locations)}
 

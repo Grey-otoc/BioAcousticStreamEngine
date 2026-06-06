@@ -1493,13 +1493,15 @@ async function refreshReportLocations() {
 
 async function loadReport() {
   const btn = document.getElementById('btn-load-report');
-  const from = document.getElementById('r-from').value;
+  const fromEl = document.getElementById('r-from');
+  const el = document.getElementById('report-content');
+  if (!el || !fromEl) return;   // navigated away before load fired
+  const from = fromEl.value;
   const to = document.getElementById('r-to').value;
   const classifier = document.getElementById('r-type')?.value || 'all';
   const species = document.getElementById('r-species')?.value || '';
-  const el = document.getElementById('report-content');
   el.innerHTML = '<div class="empty">Loading...</div>';
-  btnLoad(btn, '⟳ Loading...');
+  if (btn) btnLoad(btn, '⟳ Loading...');
   const location = document.getElementById('r-location')?.value || '';
   const classifierParam = classifier && classifier !== 'all' ? `&classifier=${classifier}` : '';
   const speciesParam = species ? `&species=${encodeURIComponent(species)}` : '';
@@ -1524,9 +1526,9 @@ async function loadReport() {
     // Load heatmaps in parallel
     loadHeatmaps(from, to, classifierParam.replace('&classifier=',''), locationParam.replace('&location=',''));
   } catch (err) {
-    el.innerHTML = `<div class="empty" style="color:var(--danger)">${err.message}</div>`;
+    if (el) el.innerHTML = `<div class="empty" style="color:var(--danger)">${err.message}</div>`;
     toast(err.message, 'error', 6000);
-  } finally { btnDone(btn); }
+  } finally { if (btn) btnDone(btn); }
 }
 
 async function loadHeatmaps(from, to, classifier, location) {
