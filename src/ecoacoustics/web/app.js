@@ -44,6 +44,13 @@ const api = {
       body: JSON.stringify(body),
     });
   },
+  patch(path, body = {}) {
+    return this._request(path, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  },
   del(path) { return this._request(path, { method: 'DELETE' }); },
 };
 
@@ -1046,11 +1053,15 @@ async function loadMicClfPanel() {
     }
 
     const pipelines = status.pipelines || {};
+    const noDevices = !devData.devices.length;
     const deviceOpts = devData.devices.map(d =>
-      `<option value="${escHtml(d.name)}">${escHtml(d.label || d.name)}</option>`
+      `<option value="${escHtml(d.name)}">${escHtml(d.label || d.name)}${d.is_default ? ' ★' : ''}</option>`
     ).join('');
+    const deviceWarn = noDevices
+      ? `<p style="font-size:0.78rem;color:var(--warning);margin-bottom:10px">⚠ No audio devices detected — check that PipeWire/PulseAudio is running and microphones are connected.</p>`
+      : '';
 
-    panel.innerHTML = mics.map((mic, idx) => {
+    panel.innerHTML = deviceWarn + mics.map((mic, idx) => {
       const micKey = 'mic_' + mic.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/, '');
       const pip = pipelines[micKey];
       const isRunning = pip && pip.state !== 'idle';
