@@ -2259,6 +2259,9 @@ function _buildFreqAxis(sampleRate, logScale) {
 // (all available browser audio inputs by their real labels).
 // The Location picker is informational — selecting one suggests a Mic but the user
 // can always override by changing the Mic dropdown directly.
+// Cached Devices API response so onSpecLocationChange doesn't re-fetch on every change.
+let _specApiDevices = [];
+
 async function _populateSpecDevices() {
   try {
     // Unlock real device labels (browser security requirement)
@@ -2272,11 +2275,13 @@ async function _populateSpecDevices() {
     const prevLocVal = locSel.value || '';
     const prevDevId  = devSel.value || '';
 
-    const [mics, browserDevices] = await Promise.all([
+    const [mics, apiResp, browserDevices] = await Promise.all([
       api.get('/api/settings/mics').catch(() => []),
+      api.get('/api/devices').catch(() => ({ devices: [] })),
       navigator.mediaDevices.enumerateDevices()
         .then(ds => ds.filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default')),
     ]);
+    _specApiDevices = apiResp.devices || [];
 
     // Location dropdown — monitoring locations that have a device assigned
     locSel.innerHTML = '<option value="">— any —</option>';
@@ -2291,37 +2296,63 @@ async function _populateSpecDevices() {
 
     // Restore location selection, then populate Mic dropdown filtered to that location
     if (prevLocVal) locSel.value = prevLocVal;
-    _fillMicDropdown(locSel.value, browserDevices, devSel, prevDevId);
+    _fillMicDropdown(locSel.value, _specApiDevices, browserDevices, devSel, prevDevId);
   } catch (e) {
     console.warn('Spectrogram device list:', e);
   }
 }
 
-// Fill the Mic dropdown with devices linked to the selected location.
-// If the location has one clear match it is auto-selected; two identical
-// devices that tie are both shown so the user can pick; no location selected
-// or no match found → show all available devices.
-function _fillMicDropdown(pipewireSource, browserDevices, devSel, preferDeviceId) {
-  const candidates = pipewireSource
-    ? _candidatesForSource(pipewireSource, browserDevices)
-    : browserDevices;  // no location → show everything
-
-  // Fall back to showing all devices if nothing matched
-  const list = candidates.length ? candidates : browserDevices;
-
+// Fill the Mic dropdown to show only the device linked to the selected location,
+// using the same label format as the Recording Locations settings page.
+// - One clear browser match  → auto-selected, friendly label shown
+// - Multiple tied matches    → all shown with (1)/(2) suffix so user can pick
+// - No browser match         → shows friendly label with value='' (system default);
+//                              "Using:" indicator will reveal what's actually captured
+// - No location selected     → all browser devices listed by their actual labels
+function _fillMicDropdown(pipewireSource, apiDevices, browserDevices, devSel, preferDeviceId) {
   devSel.innerHTML = '<option value="">System default</option>';
-  for (const d of list) {
-    const opt = document.createElement('option');
-    opt.value       = d.deviceId;
-    opt.textContent = d.label || d.deviceId;
-    devSel.appendChild(opt);
+
+  if (!pipewireSource) {
+    // No location — list every browser device so the user can pick freely
+    for (const d of browserDevices) {
+      const opt = document.createElement('option');
+      opt.value       = d.deviceId;
+      opt.textContent = d.label || d.deviceId;
+      devSel.appendChild(opt);
+    }
+    if (preferDeviceId) devSel.value = preferDeviceId;
+    return;
   }
 
-  // Restore previous selection if it is still in the list; otherwise auto-select
-  if (preferDeviceId && [...devSel.options].some(o => o.value === preferDeviceId)) {
-    devSel.value = preferDeviceId;
-  } else if (list.length === 1) {
-    devSel.value = list[0].deviceId;  // exactly one candidate — select it automatically
+  // Look up the friendly label from the Devices API — same label as Recording Locations
+  const apiEntry    = (apiDevices || []).find(d => d.name === pipewireSource);
+  const displayName = apiEntry?.label || pipewireSource;
+
+  // Find matching browser deviceId(s) via keyword heuristic
+  const candidates = _candidatesForSource(pipewireSource, browserDevices);
+
+  if (candidates.length === 0) {
+    // Browser cannot see this device — show its configured name, use system default
+    const opt = document.createElement('option');
+    opt.value       = '';
+    opt.textContent = displayName;
+    devSel.appendChild(opt);
+    // value stays '' → getUserMedia will use system default
+  } else if (candidates.length === 1) {
+    const opt = document.createElement('option');
+    opt.value       = candidates[0].deviceId;
+    opt.textContent = displayName;
+    devSel.appendChild(opt);
+    devSel.value = candidates[0].deviceId;
+  } else {
+    // Ambiguous (two identical-model devices) — show both with a counter suffix
+    candidates.forEach((d, i) => {
+      const opt = document.createElement('option');
+      opt.value       = d.deviceId;
+      opt.textContent = `${displayName} (${i + 1})`;
+      devSel.appendChild(opt);
+    });
+    if (preferDeviceId) devSel.value = preferDeviceId;
   }
 }
 
@@ -2371,7 +2402,7 @@ async function onSpecLocationChange() {
   const browserDevices = await navigator.mediaDevices.enumerateDevices()
     .then(ds => ds.filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default'));
 
-  _fillMicDropdown(locSel.value, browserDevices, devSel, '');
+  _fillMicDropdown(locSel.value, _specApiDevices, browserDevices, devSel, '');
 
   if (_spec.running) {
     const wasMonitoring = _spec.monitoring;
