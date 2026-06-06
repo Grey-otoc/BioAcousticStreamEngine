@@ -30,18 +30,22 @@ This project was born from a belief that technology can bring people closer to t
 
 ## Features
 
-- **Live microphone streaming** — continuous audio capture with configurable chunk size; multiple concurrent microphones supported, each assigned to a different classifier
+- **Live microphone streaming** — continuous audio capture with configurable chunk size; multiple concurrent microphones supported via a many-to-many mic-to-classifier mapping; each monitoring location has its own device, classifier list, and schedule
 - **BirdNET identification** — powered by [BirdNET-Analyzer](https://github.com/kahst/BirdNET-Analyzer) via [birdnetlib](https://github.com/joeweiss/birdnetlib); identifies 6,000+ species
 - **Bat detection** — powered by [BatDetect2](https://github.com/macaodha/batdetect2); 17 UK/European species; requires an ultrasonic microphone (≥384 kHz)
+- **Soil Acoustic Index (SAI v2)** — Blenheim Innovation; NDSI + bio-band RMS + transient gate; rejects traffic rumble, mains hum, propeller and helicopter noise; contact/geophone microphone
+- **Water Acoustic Index (WAI, beta)** — Blenheim Innovation; NDWI + bio-band RMS + ACI; designed for freshwater hydrophone deployments; detects fish choruses and invertebrate activity (300–5000 Hz)
 - **Scheduled listening** — automatically wakes and sleeps around dawn chorus, morning song, and dusk windows calculated from local sunrise/sunset
 - **Adaptive scheduling** — if nocturnal species (owls, nightjars) are detected, a night window is automatically added
-- **Detailed logging** — every detection logged with date, time, species, scientific name, confidence, and call number within the session
+- **Auto-resume on boot** — configurable via dashboard; BASE resumes recording automatically after a power cut or system restart without any manual intervention
+- **Detailed logging** — every detection logged with date, time, species, scientific name, confidence, call number, monitoring location, and weather data
 - **Session summaries** — per-window species totals with max and average confidence
-- **Live MQTT streaming** — every detection published as JSON in real time; direct or bridge connection; configurable via web UI; each payload carries full site and monitoring-location coordinates
-- **Browser dashboard** — full web UI for live monitoring, schedule management, audio clips, reports, and settings; per-microphone schedule window and classifier tags
+- **Live MQTT streaming** — every detection published as JSON in real time; direct or bridge connection; configurable via web UI; each payload carries full site and monitoring-location coordinates and current weather
+- **Browser dashboard** — full web UI for live monitoring; per-microphone device assignment, classifier selection, and schedule control all on the dashboard; audio clips, reports, and settings
+- **Live spectrogram** — real-time audio frequency display with location-name dropdown (switches the audio input to the selected monitoring location's microphone); headphone monitoring button to listen in live
 - **Species gallery** — live photo grid that populates as species are detected; confidence filter, detection counts, CC attribution overlays; replace stock images with your own photographs via the built-in upload tool
-- **BASE Viewer** — a separate ambient display page (`/viewer/`) showing live species detections as a full-screen photo grid with sounds; suitable for kiosks, public screens, and Yodeck deployments; configurable detection retention (1 hour to unlimited, default 1 day); keeps detections from different sites on separate cards
-- **Extensible architecture** — insect and soil classifiers are structured and ready for model plug-ins
+- **BASE Viewer** — a separate ambient display page (`/viewer/`) showing live species detections as a full-screen photo grid with sounds; suitable for kiosks, public screens, and Yodeck deployments; PWA-ready with service worker caching for instant load from home screen; reconnects to MQTT automatically when returning from background
+- **Extensible architecture** — water, insect, and additional classifiers slot in via the REGISTRY pattern
 
 ---
 
@@ -193,9 +197,9 @@ A browser tab opens automatically at `http://localhost:8000`. A desktop launcher
 
 | Page | Features |
 |---|---|
-| **Dashboard** | Live detection feed, real-time VU meter, per-device start/stop controls, today's species count and call totals; each microphone row shows its active schedule window tag and coloured classifier badges (🐦 Birds, 🦇 Bats, 🐝 Bees, …) |
+| **Dashboard** | Live detection feed, real-time VU meter, per-microphone device assignment, classifier selection (🐦🦇🐝🦗🌱💧), and schedule mode (auto/manual); start/stop per mic; today's species count and call totals; live spectrogram with location dropdown and headphone monitoring |
 | **Gallery** | Live photo grid populated as species are detected; confidence threshold filter; detection counts; CC attribution overlays; upload your own images per species |
-| **Schedule** | Today's listening windows, add/remove custom windows, assign classifiers and microphones per organism group |
+| **Schedule** | Today's listening windows, add/remove custom windows |
 | **Clips** | Browse saved audio clips by species and classifier, play in browser, delete clips |
 | **Reports** | Date and species filtering, daily summary table, download detections/sessions as CSV, clear all logs |
 | **Settings** | Recording location (name, lat/lon), monitoring locations (mics list with individual lat/lon), MQTT broker configuration with connection test, classifier device and location assignment |
@@ -371,12 +375,13 @@ Results are written to the `output/` directory (created automatically).
 | `window_name` | Which schedule window (dawn_chorus, dusk, manual, …) |
 | `date` | YYYY-MM-DD |
 | `time` | HH:MM:SS |
-| `classifier` | Model used (bird, bat, insect, soil) |
+| `classifier` | Model used (bird, bat, bee, insect, soil, water) |
 | `species_common` | Common name, e.g. *Robin* |
 | `species_scientific` | Scientific name, e.g. *Erithacus rubecula* |
 | `confidence` | BirdNET confidence score (0–1) |
 | `call_number_in_session` | Running count of calls for this species this session |
-| `latitude` / `longitude` | Recording location |
+| `latitude` / `longitude` | Recording location coordinates |
+| `monitoring_location` | Name of the specific monitoring location (mic position) that captured this detection |
 
 ### `output/sessions.csv` — one row per species per session
 
@@ -414,6 +419,7 @@ sudo systemctl enable --now mosquitto
 | `bioacoustics/detections/bee` | Bee detections only |
 | `bioacoustics/detections/insect` | Insect detections only |
 | `bioacoustics/detections/soil` | Soil acoustics detections only |
+| `bioacoustics/detections/water` | Water acoustics (hydrophone) detections only |
 | `bioacoustics/status` | **Retained** — heartbeat published on startup and every hour; confirms the machine is alive even when no species are being detected |
 
 The topic prefix (`bioacoustics`) is configurable in `config/settings.yaml`.
@@ -481,9 +487,9 @@ Each detection message is a JSON object containing full site and monitoring-loca
 | `cloud_cover_pct` | Total cloud cover (%) |
 | `precipitation_mm` | Precipitation in the last hour (mm) |
 
-Weather is fetched from [Open-Meteo](https://open-meteo.com/) (free, no API key) once per hour using the site's latitude/longitude. All weather fields are `null` if the fetch hasn't succeeded yet. Disable with `weather.enabled: false` in `config/settings.yaml`.
+Weather is fetched from [Open-Meteo](https://open-meteo.com/) (free, no API key) every 15 minutes using the monitoring location's own latitude/longitude. All weather fields are `null` if the fetch hasn't succeeded yet. Disable with `weather.enabled: false` in `config/settings.yaml`.
 
-`location_name` and its coordinates will be empty/null if no location has been assigned to the classifier in `classifiers.locations`.
+`location_name` is derived from the monitoring location (mic) that generated the detection, as configured in the `mics:` list in `settings.yaml`.
 
 ### Locations payload
 
@@ -595,26 +601,32 @@ location:
   latitude: 51.8403
   longitude: -1.3625
 
-mics:                       # monitoring locations (individual mic positions)
+mics:                       # monitoring locations — one entry per deployed microphone
   - name: "Garden"
     latitude: 51.8699
     longitude: -1.4794
-  - name: "Inside Panel Area"
+    device: alsa_input.usb-openacousticdevices...  # PipeWire source name (from list-devices)
+    classifiers:                                   # which classifiers run on this mic
+      - bird
+      - bee
+    schedule: auto                                 # auto = follow schedule windows; manual = start only when triggered
+  - name: "Lake Hydrophone"
     latitude: 51.8587
     longitude: -1.3391
+    device: alsa_input.usb-somehydrophone...
+    classifiers:
+      - water
+    schedule: manual
 
 classifiers:
   active:
-    - bird
-    - bat
-    - bee
+    - bird                  # global fallback list (used when no per-mic classifiers are set)
   devices:
-    bird: alsa_input.usb-openacousticdevices...  # PipeWire source name (from list-devices)
-    bat:  alsa_input.usb-openacousticdevices...
-    bee:  null                                    # null = use audio.device default
-  locations:
-    bird: "Garden"          # which monitoring location each classifier listens from
-    bat:  "Garden"
+    bird: null              # global device fallback — overridden by per-mic device above
+    bat:  null
+    bee:  null
+    soil: null
+    water: null
 
 bird:
   min_confidence: 0.35      # detections below this are ignored (0–1)
@@ -666,7 +678,9 @@ To discover available microphone source names, run:
 .venv/bin/python -m ecoacoustics.main list-devices
 ```
 
-Assign the PipeWire source name (e.g. `alsa_input.usb-openacousticdevices...`) to the relevant classifier under `classifiers.devices`.
+Assign the PipeWire source name (e.g. `alsa_input.usb-openacousticdevices...`) to each monitoring location's `device:` field in the `mics:` list. The device dropdown in the dashboard will also list all detected devices and let you assign them without editing the file directly. If a USB microphone does not appear, check it is connected through a **powered** USB hub — four USB mics exceed the current budget of an unpowered hub.
+
+Per-mic configuration (device, classifiers, schedule) can be edited live from the **Dashboard** without restarting the server.
 
 ---
 
@@ -688,6 +702,7 @@ Times shift daily with sunrise/sunset. Run `status` to see exact times for today
 ```
 ├── config/
 │   ├── settings.yaml               # All configuration (safe to commit)
+│   ├── autostart.yaml              # Auto-resume state — written by BASE on start/stop
 │   ├── secrets.yaml                # Broker credentials — gitignored, never committed
 │   └── secrets.yaml.example        # Template for secrets.yaml
 ├── src/ecoacoustics/
@@ -711,7 +726,8 @@ Times shift daily with sunrise/sunset. Run `status` to see exact times for today
 │   │   ├── bird.py                 # BirdNET via birdnetlib (active)
 │   │   ├── bat.py                  # BatDetect2 — 17 UK/European species
 │   │   ├── insect.py               # Orthoptera — wired for OrthopterOSS / OpenSoundscape
-│   │   └── soil.py                 # Soil Acoustic Index v2 — NDSI + transient gate
+│   │   ├── soil.py                 # Soil Acoustic Index v2 — NDSI + transient gate
+│   │   └── water.py                # Water Acoustic Index — NDWI + ACI for hydrophone
 │   ├── output/
 │   │   ├── logger.py               # Console display + CSV writing
 │   │   └── mqtt_publisher.py       # Publishes detections to MQTT broker
@@ -727,6 +743,7 @@ Times shift daily with sunrise/sunset. Run `status` to see exact times for today
 │   ├── index.html              # BASE Viewer — ambient kiosk display
 │   ├── viewer.js               # Gallery, MQTT, sounds, image management
 │   ├── viewer.css              # Full-screen dark layout
+│   ├── sw.js                   # Service worker — app-shell caching for PWA / home screen
 │   └── assets/
 │       ├── images/             # Per-species stock photos (bundled)
 │       └── sounds/             # Per-species default sounds (optional)
@@ -859,11 +876,16 @@ Restart BASE — insect detections will appear in the live feed immediately.
 - [x] Bat classifier — BatDetect2, 17 UK/European species (requires ultrasonic microphone ≥192 kHz)
 - [x] Web dashboard — live detections, schedule management, audio clips, reports, settings
 - [x] MQTT live feed — direct and bridge connection modes, configurable via UI
-- [x] Multi-microphone support — per-classifier device assignment
+- [x] Multi-microphone support — many-to-many mic-to-classifier mapping; per-mic device, classifier list, and schedule configured from dashboard
 - [x] Bee buzz classifier — BuzzDetect v1.0.1 (YAMNet, 16 kHz; detects insect flight buzz)
 - [x] Insect classifier — grasshoppers and bush crickets; ResNet18 v1 trained by Blenheim Palace Innovation on InsectSet459 + ECOSoundSet, 8 UK species *(v1 operational; model retraining in progress — improved version coming soon)*
 - [x] Soil Acoustic Index (SAI v2) — Blenheim Innovation; NDSI + bio-band RMS + transient gate, rejects traffic rumble, mains hum, propeller and helicopter noise
+- [x] Water Acoustic Index (WAI, beta) — Blenheim Innovation; NDWI + bio-band RMS + ACI; freshwater hydrophone; fish calls and invertebrate activity (300–5000 Hz)
+- [x] Auto-resume on boot — BASE resumes recording after power cuts or restarts; configurable via dashboard
 - [x] Species activity heatmaps by time of day and season
+- [x] BASE Viewer PWA — service worker caching, instant load from home screen, automatic MQTT reconnect on return from background
+- [ ] Water classifier calibration against labelled hydrophone recordings from the Great Lake
+- [ ] Insect classifier v2 — improved model with larger training dataset
 
 ---
 
@@ -1068,6 +1090,30 @@ The multiplicative form means a signal must be (a) audible in the bio band, (b) 
 The v1 metrics (RMS + Acoustic Complexity Index after Pieretti et al. 2011, plus spectral entropy) are still computed and surfaced in detection metadata as `sai_v1` so longitudinal comparisons against historical detections.csv rows remain meaningful. Setting `soil.ndsi.enabled: false` in `config/settings.yaml` makes v1 the primary score again.
 
 > Thresholds are signal-processing-derived and not yet calibrated against labelled probe recordings. Treat absolute scores as indicative; relative changes across time on a single probe are the reliable signal.
+
+---
+
+---
+
+### Water Acoustic Index (WAI)
+
+The Water Acoustic Index is original research and engineering by the **Blenheim Palace Innovation Team**, designed for freshwater deployments at the Great Lake, Blenheim Palace.
+
+Like the Soil Acoustic Index, WAI does not wrap a pre-trained model. It is a signal-processing chain that scores each 3-second audio chunk from a submersible hydrophone using three independent terms:
+
+- **NDWI** *(Normalised Difference Water Index)* — the ratio of biological-band power (300–5000 Hz, fish calls and invertebrate activity) to anthropogenic-band power (10–200 Hz, boat motors and flow rumble). Answers: is the energy biological, or low-frequency mechanical?
+- **Bio-band RMS** — gates true silence to zero so the index cannot fire on a quiet channel.
+- **ACI** *(Acoustic Complexity Index)* — fish choruses and invertebrate clicks are temporally variable; steady flow noise and motor drone are monotone. ACI is high for complex, changing signals and low for repetitive background noise.
+
+`WAI = NDWI₀₁ × bio_rms_norm × ACI₀₁`
+
+A cascade of IIR notches at 50, 100, 150, and 200 Hz removes mains hum conducted along hydrophone cables. The 30-second per-detection cooldown prevents flooding the log during sustained fish chorus events.
+
+Target signals: spawning fish choruses (perch, pike, carp), territorial grunts, freshwater invertebrate clicks (crayfish, water beetles). Target suppression: outboard motor noise, weir turbulence, cable hum.
+
+> WAI thresholds and band boundaries are signal-processing-derived and not yet calibrated against labelled hydrophone recordings from the Great Lake. Treat absolute scores as indicative; relative changes across time on a single deployed hydrophone are the reliable signal.
+
+Acoustic indices after: Pieretti et al. (2011) ACI; Pijanowski et al. (2011) NDSI; Staaterman et al. (2014) aquatic soundscape methods.
 
 ---
 

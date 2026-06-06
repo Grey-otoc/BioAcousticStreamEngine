@@ -136,6 +136,30 @@ A collapsible **How BASE Works** section introduces the system to visitors unfam
 
 ---
 
+## Progressive Web App (PWA) — Add to Home Screen
+
+The viewer is a fully-featured PWA. On Chrome (Android/desktop) or Safari (iOS), open the viewer and use **Add to Home Screen** from the browser menu. The installed icon opens the viewer full-screen, like a native app.
+
+### What the service worker provides
+
+A service worker (`sw.js`) caches the full app shell on first load:
+
+- The viewer loads instantly from home screen even without a network connection
+- Cached assets (JS, CSS, icons) are served from local storage; the MQTT connection is re-established once online
+- Cache is automatically updated when a new version of the viewer is deployed
+
+### Background behaviour and reconnection
+
+| Platform | Behaviour |
+|---|---|
+| **Desktop Chrome / Firefox** | WebSocket connection survives in background tabs; detections continue to arrive with no interruption |
+| **Android Chrome** | May suspend inactive tabs after several minutes; reconnects automatically within 1–2 seconds when the tab is opened again |
+| **iOS Safari (browser tab or PWA)** | iOS suspends all JS execution when an app is backgrounded — the WebSocket is closed. When you return to the viewer it reconnects immediately (sub-second). Detections received while suspended are not replayed, but all new detections from that point arrive instantly |
+
+The viewer fires an explicit MQTT reconnect on `visibilitychange`, `pageshow` (back-forward cache restore), `resume` (Page Lifecycle API), and `online` (network restored) events — so connection is restored as fast as the browser allows after any suspension.
+
+---
+
 ## Local Mosquitto (WebSocket)
 
 If connecting to a local Mosquitto broker, add WebSocket support to `/etc/mosquitto/mosquitto.conf`:
@@ -157,5 +181,6 @@ Then use `ws://localhost:9001` (or the machine's IP) as the broker URL in the vi
 |---|---|
 | `localStorage` | Settings (broker URL, prefix, sound on/off, confidence threshold, explainer state), today's species gallery cache |
 | `IndexedDB` | Custom species photos and uploaded sound clips |
+| **Service worker cache** | App shell (HTML, JS, CSS, icons, manifest) — enables instant load and offline fallback |
 
-Clearing browser storage (DevTools → Application → Storage → Clear) will remove all photos, sounds, the gallery cache, and saved settings.
+Clearing browser storage (DevTools → Application → Storage → Clear) will remove all photos, sounds, the gallery cache, and saved settings. To clear the service worker cache too, go to DevTools → Application → Service Workers → Unregister, then DevTools → Application → Cache Storage → Delete.
