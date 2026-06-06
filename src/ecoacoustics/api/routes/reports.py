@@ -30,13 +30,13 @@ def list_locations():
     """Configured monitoring locations merged with any historical values from detections.csv."""
     locations: set[str] = set()
 
-    # Primary source: configured mics (always populated, even before any recordings)
+    # Primary source: configured mics that have at least one classifier (can produce detections)
     if _SETTINGS.exists():
         with open(_SETTINGS) as f:
             cfg = yaml.safe_load(f) or {}
         for mic in cfg.get("mics") or []:
             name = (mic.get("name") or "").strip()
-            if name:
+            if name and mic.get("classifiers"):
                 locations.add(name)
 
     # Secondary: historical values already in the CSV (catches renamed/removed locations)
