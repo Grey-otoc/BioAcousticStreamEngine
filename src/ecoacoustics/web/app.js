@@ -266,6 +266,7 @@ function renderDashboard() {
               <label>Location</label>
               <select id="spec-device" onchange="changeSpecDevice()"><option value="">System default</option></select>
               <label><input type="checkbox" id="spec-log" style="accent-color:var(--primary)"> Log scale</label>
+              <span id="spec-active-label" style="font-size:0.78em;color:var(--muted);font-style:italic"></span>
             </div>
             <div class="spec-wrap">
               <canvas id="spec-canvas" width="1200" height="220"></canvas>
@@ -2299,11 +2300,13 @@ async function _populateSpecDevices() {
 
 // Match a PipeWire source name to a browser deviceId by extracting meaningful keywords
 // from the source name and scoring them against browser device labels.
+// Bus-type affinity (PCI→built-in, USB→usb labels) breaks ties when generic terms
+// like "analog" appear in multiple device labels.
 function _matchBrowserDevice(pipewireSource, browserDevices) {
-  // Only strip truly non-descriptive structural tokens; keep words like analog/stereo/mono
-  // because they appear in browser labels and distinguish between multiple built-in devices.
-  const GENERIC = new Set(['alsa', 'input', 'output', 'fallback', 'info', 'usb']);
-  const keywords = pipewireSource.toLowerCase()
+  const src = pipewireSource.toLowerCase();
+  // stereo/mono omitted — universal noise that appears in virtually every device name
+  const GENERIC = new Set(['alsa', 'input', 'output', 'fallback', 'info', 'usb', 'stereo', 'mono']);
+  const keywords = src
     .replace(/[_\-.]/g, ' ')
     .split(/\s+/)
     .filter(w =>
@@ -2315,10 +2318,16 @@ function _matchBrowserDevice(pipewireSource, browserDevices) {
 
   if (!keywords.length) return null;
 
+  const isPci = src.includes('.pci-');
+  const isUsb = src.includes('.usb-');
+
   let bestId = null, bestScore = 0;
   for (const d of browserDevices) {
     const label = (d.label || '').toLowerCase();
-    const score = keywords.filter(w => label.includes(w)).length;
+    let score = keywords.filter(w => label.includes(w)).length;
+    // Fractional bonus to break ties: PCI devices pair with built-in labels, USB with usb labels
+    if (isPci && (label.includes('built') || label.includes('internal'))) score += 0.5;
+    if (isUsb && label.includes('usb')) score += 0.5;
     if (score > bestScore) { bestScore = score; bestId = d.deviceId; }
   }
   return bestScore > 0 ? bestId : null;
@@ -2374,6 +2383,12 @@ async function _startSpectrogram() {
   const constraints = { audio: deviceId ? { deviceId: { exact: deviceId } } : true, video: false };
   try {
     _spec.stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    // Show the actual track label so user can verify the correct mic is captured
+    const trackLabel = _spec.stream.getAudioTracks()[0]?.label || '';
+    const indicator = document.getElementById('spec-active-label');
+    if (indicator) indicator.textContent = trackLabel ? `Using: ${trackLabel}` : '';
+
     _spec.audioCtx = new AudioContext();
     _spec.analyser = _spec.audioCtx.createAnalyser();
     _spec.analyser.fftSize = 4096;          // 2048 bins → good freq resolution
@@ -2410,6 +2425,8 @@ function _stopSpectrogram() {
   _spec.monitoring = false;
   const monBtn = document.getElementById('btn-spec-monitor');
   if (monBtn) { monBtn.classList.remove('active'); monBtn.title = 'Listen in'; }
+  const indicator = document.getElementById('spec-active-label');
+  if (indicator) indicator.textContent = '';
 }
 
 function toggleMonitor() {
