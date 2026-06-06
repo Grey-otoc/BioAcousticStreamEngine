@@ -190,8 +190,10 @@ class Scheduler:
     def from_config(cls, cfg: dict) -> "Scheduler":
         """Construct a Scheduler from the loaded settings.yaml dictionary."""
         sched_cfg = cfg.get("schedule", {})
-        lat = cfg["bird"]["latitude"]
-        lon = cfg["bird"]["longitude"]
+        loc = cfg.get("location") or {}
+        bird = cfg.get("bird") or {}
+        lat = loc.get("latitude") or bird.get("latitude") or 0.0
+        lon = loc.get("longitude") or bird.get("longitude") or 0.0
         tz = sched_cfg.get("timezone", "UTC")
 
         windows = [
