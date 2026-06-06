@@ -45,6 +45,19 @@ from ecoacoustics.output.heartbeat import heartbeat_loop
 
 CONFIG_PATH = "config/settings.yaml"
 
+# Fail fast with a clear message rather than a cryptic 500 on every request.
+if not Path(CONFIG_PATH).exists():
+    example = Path("config/settings.yaml.example")
+    if example.exists():
+        import shutil
+        shutil.copy(example, CONFIG_PATH)
+        _log.warning("config/settings.yaml not found — created from example. Edit it to set your site details.")
+    else:
+        raise FileNotFoundError(
+            "config/settings.yaml not found. "
+            "Run install.sh or copy config/settings.yaml.example to config/settings.yaml."
+        )
+
 _ws_clients: set[WebSocket] = set()
 _broadcast_queue: asyncio.Queue = asyncio.Queue()
 
