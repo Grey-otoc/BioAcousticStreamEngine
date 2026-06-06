@@ -27,17 +27,28 @@ def _paths() -> tuple[Path, Path]:
 
 @router.get("/reports/locations")
 def list_locations():
-    """All unique site and monitoring location values in detections.csv."""
-    det_path, _ = _paths()
-    if not det_path.exists():
-        return {"locations": []}
+    """Configured monitoring locations merged with any historical values from detections.csv."""
     locations: set[str] = set()
-    with open(det_path) as f:
-        for row in csv.DictReader(f):
-            for field in ("location_name", "monitoring_location"):
-                loc = row.get(field, "").strip()
-                if loc:
-                    locations.add(loc)
+
+    # Primary source: configured mics (always populated, even before any recordings)
+    if _SETTINGS.exists():
+        with open(_SETTINGS) as f:
+            cfg = yaml.safe_load(f) or {}
+        for mic in cfg.get("mics") or []:
+            name = (mic.get("name") or "").strip()
+            if name:
+                locations.add(name)
+
+    # Secondary: historical values already in the CSV (catches renamed/removed locations)
+    det_path, _ = _paths()
+    if det_path.exists():
+        with open(det_path) as f:
+            for row in csv.DictReader(f):
+                for field in ("monitoring_location",):
+                    loc = row.get(field, "").strip()
+                    if loc:
+                        locations.add(loc)
+
     return {"locations": sorted(locations)}
 
 

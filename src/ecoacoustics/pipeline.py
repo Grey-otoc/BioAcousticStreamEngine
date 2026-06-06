@@ -58,7 +58,7 @@ class Pipeline:
         pipeline.close()
     """
 
-    def __init__(self, config_path: str = "config/settings.yaml", detection_callback: Optional[Callable] = None, level_callback: Optional[Callable] = None, device_override=None, config_override: Optional[dict] = None):
+    def __init__(self, config_path: str = "config/settings.yaml", detection_callback: Optional[Callable] = None, level_callback: Optional[Callable] = None, device_override=None, config_override: Optional[dict] = None, mic_name: str = ""):
         """Load configuration and prepare all subsystems.
 
         Args:
@@ -118,10 +118,10 @@ class Pipeline:
                 mics=mics_cfg,
             )
 
-        # Auto-derive monitoring location: use the single configured mic name if there is
-        # exactly one, otherwise leave blank (multi-mic setups stamp location via device).
+        # Determine which monitoring location this pipeline belongs to.
+        # Explicit mic_name wins; fall back to the single-mic auto-derive.
         _mics = self._cfg.get("mics") or []
-        self._mic_location: str = _mics[0].get("name", "") if len(_mics) == 1 else ""
+        self._mic_location: str = mic_name or (_mics[0].get("name", "") if len(_mics) == 1 else "")
 
         self._logger = DetectionLogger(
             console=out_cfg.get("console", True),

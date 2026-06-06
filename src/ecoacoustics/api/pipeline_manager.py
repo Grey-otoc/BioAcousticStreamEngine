@@ -160,6 +160,7 @@ class PipelineManager:
                     level_callback=self._on_level,
                     device_override=self._device_index,
                     config_override=self._config_override or None,
+                    mic_name=self._mic_name,
                 )
                 if not self._config_override:
                     self._start_config_watcher(self._pipeline, cfg)
@@ -211,6 +212,7 @@ class PipelineManager:
                             level_callback=self._on_level,
                             device_override=self._device_index,
                             config_override=self._config_override or None,
+                            mic_name=self._mic_name,
                         )
                         if not self._config_override:
                             self._start_config_watcher(self._pipeline, cfg)
