@@ -2516,10 +2516,10 @@ async function _startBrowserSpectrogram() {
     const indicator = document.getElementById('spec-active-label');
     if (indicator) indicator.textContent = trackLabel ? `Using: ${trackLabel}` : '';
 
-    _spec.audioCtx = new AudioContext();
+    _spec.audioCtx = new AudioContext({ sampleRate: 48000 });
     _spec.analyser = _spec.audioCtx.createAnalyser();
     _spec.analyser.fftSize = 4096;
-    _spec.analyser.smoothingTimeConstant = 0.4;
+    _spec.analyser.smoothingTimeConstant = 0.1;
     _spec.source = _spec.audioCtx.createMediaStreamSource(_spec.stream);
     _spec.source.connect(_spec.analyser);
     _spec.freqData = new Uint8Array(_spec.analyser.frequencyBinCount);

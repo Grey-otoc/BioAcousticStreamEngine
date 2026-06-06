@@ -33,7 +33,7 @@ _BINS = _FFT_SIZE // 2                         # 2048 bins — matches browser f
 _HANN = np.hanning(_FFT_SIZE).astype(np.float32)
 _DB_MIN = -100.0
 _DB_RANGE = 70.0                               # maxDecibels(-30) - minDecibels(-100)
-_SMOOTH = 0.4                                  # AnalyserNode.smoothingTimeConstant default
+_SMOOTH = 0.1    # low: overlap already smooths; 0.4 was double-blurring
 
 
 @router.get("/spectrogram/stream")
