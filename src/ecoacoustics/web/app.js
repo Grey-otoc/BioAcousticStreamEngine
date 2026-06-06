@@ -268,6 +268,8 @@ function renderDashboard() {
           <div class="spec-panel show" id="spec-panel">
             <div class="spec-toolbar">
               <label>Location</label>
+              <select id="spec-location" onchange="onSpecLocationChange()"><option value="">— any —</option></select>
+              <label>Mic</label>
               <select id="spec-device" onchange="changeSpecDevice()"><option value="">System default</option></select>
               <label><input type="checkbox" id="spec-log" style="accent-color:var(--primary)"> Log scale</label>
               <span id="spec-active-label" style="font-size:0.78em;color:var(--muted);font-style:italic"></span>
@@ -2253,63 +2255,72 @@ function _buildFreqAxis(sampleRate, logScale) {
     .join('');
 }
 
-// Populate the spectrogram location dropdown from monitoring locations in settings.
-// Each location that has a device assigned is matched to a browser deviceId so that
-// getUserMedia can target it — browser deviceIds are the only reliable identifier
-// for getUserMedia; PipeWire source names are matched via label keyword heuristics.
+// Populate both the Location dropdown (monitoring locations) and the Mic dropdown
+// (all available browser audio inputs by their real labels).
+// The Location picker is informational — selecting one suggests a Mic but the user
+// can always override by changing the Mic dropdown directly.
 async function _populateSpecDevices() {
   try {
-    // One-time getUserMedia call to unlock real device labels (browser security requirement)
+    // Unlock real device labels (browser security requirement)
     const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
     tmp.getTracks().forEach(t => t.stop());
 
-    const sel = document.getElementById('spec-device');
-    if (!sel) return;
-    const prevMicName = sel.options[sel.selectedIndex]?.dataset.micName || '';
-    sel.innerHTML = '<option value="">System default</option>';
+    const locSel = document.getElementById('spec-location');
+    const devSel = document.getElementById('spec-device');
+    if (!locSel || !devSel) return;
 
-    // Fetch monitoring locations and browser devices in parallel
+    const prevLocVal  = locSel.value || '';
+    const prevDevId   = devSel.value || '';
+
     const [mics, browserDevices] = await Promise.all([
       api.get('/api/settings/mics').catch(() => []),
       navigator.mediaDevices.enumerateDevices()
         .then(ds => ds.filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default')),
     ]);
 
+    // Location dropdown — monitoring locations that have a device assigned
+    locSel.innerHTML = '<option value="">— any —</option>';
     for (const mic of (mics || [])) {
-      if (!mic.device) continue;   // location not yet assigned a physical device
-      const deviceId = _matchBrowserDevice(mic.device, browserDevices);
+      if (!mic.device) continue;
       const opt = document.createElement('option');
-      opt.dataset.micName       = mic.name;
-      opt.dataset.pipewireDevice = mic.device;
-      if (deviceId) {
-        opt.value       = deviceId;
-        opt.textContent = mic.name;
-      } else {
-        opt.value       = '';
-        opt.textContent = `${mic.name} (device not found)`;
-        opt.disabled    = true;
-      }
-      sel.appendChild(opt);
+      opt.value            = mic.device;   // PipeWire source name (used for matching)
+      opt.dataset.micName  = mic.name;
+      opt.textContent      = mic.name;
+      locSel.appendChild(opt);
     }
 
-    // Restore previous selection by monitoring location name
-    if (prevMicName) {
-      const match = [...sel.options].find(o => o.dataset.micName === prevMicName && !o.disabled);
-      if (match) sel.value = match.value;
+    // Mic dropdown — every browser audio input shown by its real label
+    devSel.innerHTML = '<option value="">System default</option>';
+    for (const d of browserDevices) {
+      const opt = document.createElement('option');
+      opt.value       = d.deviceId;
+      opt.textContent = d.label || d.deviceId;
+      devSel.appendChild(opt);
+    }
+
+    // Restore previous selections; fall back to auto-suggest if device no longer present
+    if (prevLocVal) locSel.value = prevLocVal;
+    if (prevDevId && [...devSel.options].some(o => o.value === prevDevId)) {
+      devSel.value = prevDevId;
+    } else if (locSel.value) {
+      _suggestDeviceForLocation(locSel.value, browserDevices, devSel);
     }
   } catch (e) {
     console.warn('Spectrogram device list:', e);
   }
 }
 
-// Match a PipeWire source name to a browser deviceId by extracting meaningful keywords
-// from the source name and scoring them against browser device labels.
-// Bus-type affinity (PCI→built-in, USB→usb labels) breaks ties when generic terms
-// like "analog" appear in multiple device labels.
+// Suggest the best-matching browser device for a PipeWire source name.
+// Only a hint — the user can always change the Mic dropdown manually.
+function _suggestDeviceForLocation(pipewireSource, browserDevices, devSel) {
+  const suggested = _matchBrowserDevice(pipewireSource, browserDevices);
+  if (suggested) devSel.value = suggested;
+}
+
+// Heuristic: extract distinctive tokens from a PipeWire source name and score
+// them against browser device labels. Bus-type affinity breaks remaining ties.
 function _matchBrowserDevice(pipewireSource, browserDevices) {
   const src = pipewireSource.toLowerCase();
-  // Words that appear in virtually every PipeWire source name and most browser labels —
-  // keeping them as keywords causes false matches across unrelated devices.
   const GENERIC = new Set([
     'alsa', 'input', 'output', 'fallback', 'info',
     'usb', 'stereo', 'mono', 'audio', 'device',
@@ -2319,8 +2330,8 @@ function _matchBrowserDevice(pipewireSource, browserDevices) {
     .split(/\s+/)
     .filter(w =>
       w.length >= 3 &&
-      !/^\d+$/.test(w) &&           // pure digit strings
-      !/^[0-9a-f]{4,}$/.test(w) &&  // hex identifiers (serial numbers etc.)
+      !/^\d+$/.test(w) &&
+      !/^[0-9a-f]{4,}$/.test(w) &&
       !GENERIC.has(w)
     );
 
@@ -2330,33 +2341,48 @@ function _matchBrowserDevice(pipewireSource, browserDevices) {
   let bestId = null, bestScore = 0;
   for (const d of browserDevices) {
     const label = (d.label || '').toLowerCase();
-    // Only score on distinctive keywords; bus-type affinity alone can match PCI built-ins
     let score = keywords.filter(w => label.includes(w)).length;
     if (isPci && (label.includes('built') || label.includes('internal'))) score += 0.5;
-    if (isUsb && label.includes('usb')) score += 0.5;
+    // USB affinity only kicks in when there are distinctive keywords — never used alone
+    if (isUsb && keywords.length > 0 && label.includes('usb')) score += 0.5;
     if (score > bestScore) { bestScore = score; bestId = d.deviceId; }
   }
   return bestScore > 0 ? bestId : null;
 }
 
-// Sync the spectrogram to the running pipeline when exactly one mic is active.
-// Matches by monitoring location name (data-mic-name) against pipeline device_name.
+// When the user picks a monitoring location, suggest the matching Mic and switch.
+async function onSpecLocationChange() {
+  const locSel = document.getElementById('spec-location');
+  const devSel = document.getElementById('spec-device');
+  if (!locSel || !devSel) return;
+
+  if (locSel.value) {
+    const browserDevices = await navigator.mediaDevices.enumerateDevices()
+      .then(ds => ds.filter(d => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default'));
+    _suggestDeviceForLocation(locSel.value, browserDevices, devSel);
+  } else {
+    devSel.value = '';
+  }
+
+  if (_spec.running) {
+    const wasMonitoring = _spec.monitoring;
+    _stopSpectrogram();
+    await _startSpectrogram();
+    if (wasMonitoring) toggleMonitor();
+  }
+}
+
+// Sync the Location dropdown to whichever pipeline is running (no device change).
 function _syncSpecToRunningDevice() {
-  const sel = document.getElementById('spec-device');
-  if (!sel || !state.status) return;
+  const locSel = document.getElementById('spec-location');
+  if (!locSel || !state.status) return;
   const running = Object.values(state.status.pipelines || {})
     .filter(p => p.state !== 'idle' && p.device_name);
-  if (running.length !== 1) return;  // ambiguous — user must choose manually
+  if (running.length !== 1) return;
 
   const targetName = running[0].device_name;
-  for (const opt of sel.options) {
-    if (!opt.value || opt.disabled) continue;
-    if (opt.dataset.micName === targetName) {
-      if (sel.value === opt.value) return;
-      sel.value = opt.value;
-      if (_spec.running) { _stopSpectrogram(); _startSpectrogram(); }
-      return;
-    }
+  for (const opt of locSel.options) {
+    if (opt.dataset.micName === targetName) { locSel.value = opt.value; return; }
   }
 }
 
@@ -2518,7 +2544,8 @@ window.deleteClip = deleteClip;
 window.startDevice = startDevice;
 window.stopDevice = stopDevice;
 window.setFilter = setFilter;
-window.changeSpecDevice = changeSpecDevice;
+window.changeSpecDevice   = changeSpecDevice;
+window.onSpecLocationChange = onSpecLocationChange;
 window.showMicEditForm = showMicEditForm;
 window.hideMicEditForm = hideMicEditForm;
 window.saveMicEdit = saveMicEdit;
