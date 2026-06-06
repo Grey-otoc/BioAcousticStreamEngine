@@ -22,10 +22,17 @@ if [ ! -f "config/secrets.yaml" ]; then
   [ -f "config/secrets.yaml.example" ] && cp config/secrets.yaml.example config/secrets.yaml
 fi
 
-# If an existing BASE process is already on port 8000, stop it gracefully
-# before starting so we never hit "address already in use".
+# Stop any existing BASE process before starting so we never hit "address already in use".
+# The systemd service (installed by install.sh) must be stopped first — pkill alone won't
+# work because systemd immediately restarts the process after it is killed.
+if systemctl --user is-active bioacoustic-stream-engine.service >/dev/null 2>&1; then
+  echo "Stopping BASE systemd service…"
+  systemctl --user stop bioacoustic-stream-engine.service
+  sleep 1
+fi
+# Also catch any orphaned process not managed by systemd (e.g. a previous manual start).
 if lsof -ti tcp:8000 >/dev/null 2>&1; then
-  echo "Stopping existing BASE process on port 8000…"
+  echo "Stopping existing process on port 8000…"
   pkill -f "ecoacoustics.main web" 2>/dev/null || true
   sleep 1
 fi
