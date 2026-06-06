@@ -164,6 +164,10 @@ const router = {
     this.navigate(location.hash.slice(1) || 'dashboard');
   },
   navigate(page) {
+    // Release AudioContext and mic track before replacing the page DOM.
+    // Without this, each visit to the dashboard leaks an AudioContext; Chrome
+    // silently fails to create new ones after ~6 leaked instances.
+    if (_spec.running) _stopSpectrogram();
     state.page = page;
     document.querySelectorAll('nav a').forEach(a =>
       a.classList.toggle('active', a.getAttribute('href') === `#${page}`)
@@ -2222,7 +2226,7 @@ const _spec = {
   source: null,
   monitorGain: null,
   monitoring: false,
-  imageData: null,
+  freqData: null,   // preallocated FFT buffer — avoids per-frame allocation at 60fps
 };
 
 // Viridis-inspired colormap scaled to BASE's green theme
@@ -2304,8 +2308,12 @@ async function _populateSpecDevices() {
 // like "analog" appear in multiple device labels.
 function _matchBrowserDevice(pipewireSource, browserDevices) {
   const src = pipewireSource.toLowerCase();
-  // stereo/mono omitted — universal noise that appears in virtually every device name
-  const GENERIC = new Set(['alsa', 'input', 'output', 'fallback', 'info', 'usb', 'stereo', 'mono']);
+  // Words that appear in virtually every PipeWire source name and most browser labels —
+  // keeping them as keywords causes false matches across unrelated devices.
+  const GENERIC = new Set([
+    'alsa', 'input', 'output', 'fallback', 'info',
+    'usb', 'stereo', 'mono', 'audio', 'device',
+  ]);
   const keywords = src
     .replace(/[_\-.]/g, ' ')
     .split(/\s+/)
@@ -2316,16 +2324,14 @@ function _matchBrowserDevice(pipewireSource, browserDevices) {
       !GENERIC.has(w)
     );
 
-  if (!keywords.length) return null;
-
   const isPci = src.includes('.pci-');
   const isUsb = src.includes('.usb-');
 
   let bestId = null, bestScore = 0;
   for (const d of browserDevices) {
     const label = (d.label || '').toLowerCase();
+    // Only score on distinctive keywords; bus-type affinity alone can match PCI built-ins
     let score = keywords.filter(w => label.includes(w)).length;
-    // Fractional bonus to break ties: PCI devices pair with built-in labels, USB with usb labels
     if (isPci && (label.includes('built') || label.includes('internal'))) score += 0.5;
     if (isUsb && label.includes('usb')) score += 0.5;
     if (score > bestScore) { bestScore = score; bestId = d.deviceId; }
@@ -2395,6 +2401,7 @@ async function _startSpectrogram() {
     _spec.analyser.smoothingTimeConstant = 0.4;
     _spec.source = _spec.audioCtx.createMediaStreamSource(_spec.stream);
     _spec.source.connect(_spec.analyser);
+    _spec.freqData = new Uint8Array(_spec.analyser.frequencyBinCount);  // reused every frame
     _spec.monitorGain = null;
     _spec.monitoring = false;
 
@@ -2421,7 +2428,7 @@ function _stopSpectrogram() {
   if (_spec.monitorGain) { _spec.monitorGain.disconnect(); _spec.monitorGain = null; }
   if (_spec.stream) _spec.stream.getTracks().forEach(t => t.stop());
   if (_spec.audioCtx) _spec.audioCtx.close();
-  _spec.analyser = _spec.audioCtx = _spec.stream = _spec.source = null;
+  _spec.analyser = _spec.audioCtx = _spec.stream = _spec.source = _spec.freqData = null;
   _spec.monitoring = false;
   const monBtn = document.getElementById('btn-spec-monitor');
   if (monBtn) { monBtn.classList.remove('active'); monBtn.title = 'Listen in'; }
@@ -2459,7 +2466,7 @@ function _specDraw() {
   const logScale = document.getElementById('spec-log')?.checked || false;
 
   const bins = analyser.frequencyBinCount;   // 2048
-  const data = new Uint8Array(bins);
+  const data = _spec.freqData || new Uint8Array(bins);
   analyser.getByteFrequencyData(data);
 
   const w = canvas.width;
