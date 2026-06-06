@@ -2229,9 +2229,14 @@ const _spec = {
   monitorGain: null,
   monitoring: false,
   freqData: null,
-  evtSource: null,   // EventSource when using server-side FFT streaming
-  serverData: null,  // latest FFT Uint8Array received from server
-  serverMode: false, // true when server captures audio (location selected)
+  evtSource: null,       // EventSource when using server-side FFT streaming
+  serverData: null,      // latest FFT Uint8Array received from server
+  serverMode: false,     // true when server captures audio (location selected)
+  monitorCtx: null,      // AudioContext for server-mode headphone monitoring
+  monitorNode: null,     // AudioWorkletNode feeding the speaker
+  monitorGainNode: null, // GainNode between worklet and destination
+  monitorAbort: null,    // AbortController for the fetch PCM stream
+  monitorReader: null,   // ReadableStreamDefaultReader for the PCM stream
 };
 
 // Viridis-inspired colormap scaled to BASE's green theme
@@ -2542,7 +2547,63 @@ async function _startBrowserSpectrogram() {
   }
 }
 
+function _stopAudioMonitor() {
+  if (_spec.monitorReader) { _spec.monitorReader.cancel(); _spec.monitorReader = null; }
+  if (_spec.monitorAbort) { _spec.monitorAbort.abort(); _spec.monitorAbort = null; }
+  if (_spec.monitorGainNode) { _spec.monitorGainNode.disconnect(); _spec.monitorGainNode = null; }
+  if (_spec.monitorNode) { _spec.monitorNode.disconnect(); _spec.monitorNode = null; }
+  if (_spec.monitorCtx) { _spec.monitorCtx.close(); _spec.monitorCtx = null; }
+  _spec.monitoring = false;
+  const btn = document.getElementById('btn-spec-monitor');
+  if (btn) { btn.classList.remove('active'); btn.title = 'Listen in'; }
+}
+
+async function _startAudioMonitor(pipewireSource) {
+  if (_spec.monitoring) { _stopAudioMonitor(); return; }
+  const btn = document.getElementById('btn-spec-monitor');
+  try {
+    const ctx = new AudioContext({ sampleRate: 48000 });
+    await ctx.audioWorklet.addModule('/audio-monitor-worklet.js');
+    const workletNode = new AudioWorkletNode(ctx, 'audio-monitor-processor');
+    const gainNode = ctx.createGain();
+    gainNode.gain.value = 1.0;
+    workletNode.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    _spec.monitorCtx = ctx;
+    _spec.monitorNode = workletNode;
+    _spec.monitorGainNode = gainNode;
+    _spec.monitorAbort = new AbortController();
+    _spec.monitoring = true;
+    if (btn) { btn.classList.add('active'); btn.title = 'Stop listening'; }
+
+    const url = `/api/spectrogram/audio?device=${encodeURIComponent(pipewireSource)}`;
+    const resp = await fetch(url, { signal: _spec.monitorAbort.signal });
+    if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
+
+    const reader = resp.body.getReader();
+    _spec.monitorReader = reader;
+
+    // Read PCM chunks, convert Int16 → Float32, post to worklet
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done || !_spec.monitoring) break;
+      // value is Uint8Array; reinterpret as Int16
+      const i16 = new Int16Array(value.buffer, value.byteOffset, Math.floor(value.byteLength / 2));
+      const f32 = new Float32Array(i16.length);
+      for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768.0;
+      workletNode.port.postMessage(f32);
+    }
+  } catch (err) {
+    if (err.name !== 'AbortError') {
+      toast(`Monitor: ${err.message}`, 'error', 5000);
+    }
+    _stopAudioMonitor();
+  }
+}
+
 function _stopSpectrogram() {
+  _stopAudioMonitor();
   _spec.running = false;
   _spec.serverMode = false;
   _spec.serverData = null;
@@ -2552,7 +2613,6 @@ function _stopSpectrogram() {
   if (_spec.stream) _spec.stream.getTracks().forEach(t => t.stop());
   if (_spec.audioCtx) _spec.audioCtx.close();
   _spec.analyser = _spec.audioCtx = _spec.stream = _spec.source = _spec.freqData = null;
-  _spec.monitoring = false;
   const monBtn = document.getElementById('btn-spec-monitor');
   if (monBtn) { monBtn.classList.remove('active'); monBtn.title = 'Listen in'; }
   const indicator = document.getElementById('spec-active-label');
@@ -2561,7 +2621,8 @@ function _stopSpectrogram() {
 
 function toggleMonitor() {
   if (_spec.serverMode) {
-    toast('Headphone monitor is only available with "— any —" location selected', 'warn', 4000);
+    const pipewireSource = document.getElementById('spec-location')?.value || '';
+    _startAudioMonitor(pipewireSource);
     return;
   }
   if (!_spec.running || !_spec.source) {

@@ -117,3 +117,64 @@ async def spectrogram_stream(device: str = Query("", description="PipeWire sourc
             "Connection": "keep-alive",
         },
     )
+
+
+@router.get("/spectrogram/audio")
+async def spectrogram_audio(device: str = Query("", description="PipeWire source name")):
+    """Stream raw PCM audio from a named PipeWire source for headphone monitoring.
+
+    Format: signed 16-bit little-endian, mono, 48000 Hz (s16le).
+    The browser decodes this via an AudioWorklet and routes it to the speakers.
+    A separate parec process is spawned per connection so the FFT stream and the
+    audio monitor stream can run independently and be started/stopped separately.
+    """
+
+    async def generate():
+        cmd = [
+            "parec",
+            "--format=s16le",
+            "--channels=1",
+            f"--rate={_SAMPLE_RATE}",
+            "--latency-msec=40",   # low latency for monitoring feel
+        ]
+        if device:
+            cmd += [f"--device={device}"]
+
+        proc = None
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            while True:
+                chunk = await proc.stdout.read(4096)   # ~42ms chunks at 48kHz
+                if not chunk:
+                    break
+                yield chunk
+
+        except asyncio.CancelledError:
+            pass
+        except FileNotFoundError:
+            _log.warning("parec not found — cannot stream audio for monitoring")
+        except Exception as exc:
+            _log.warning("Spectrogram audio stream error (device=%r): %s", device, exc)
+        finally:
+            if proc:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except Exception:
+                    pass
+
+    return StreamingResponse(
+        generate(),
+        media_type="application/octet-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "X-Audio-Format": "s16le",
+            "X-Audio-Rate": str(_SAMPLE_RATE),
+            "X-Audio-Channels": "1",
+        },
+    )
