@@ -13,16 +13,15 @@ audio:
 # 'bat' requires an ultrasonic microphone (≥192 kHz) — expensive hardware.
 classifiers:
   active:
-    - bird
-    - bee
-  # Optional: assign a specific microphone to each classifier (pactl source name).
-  # Leave null to use the global audio.device setting.
+    - bird              # global fallback list — overridden per mic when mics[].classifiers is set
+  # Optional global device assignment; overridden per mic when mics[].device is set.
   devices:
     bat: null
     bee: null
     bird: null
     insect: null
     soil: null
+    water: null
 
 # ── Bird detection (BirdNET — 6000+ species) ─────────────────────────────────
 bird:
@@ -86,6 +85,29 @@ location:
   longitude: null
   name: ""                # human-readable site name shown in the web UI
 
+# ── Monitoring locations (individual microphone positions) ────────────────────
+# Each entry is one deployed microphone. Assign a PipeWire source name (from
+# list-devices or the dashboard device dropdown), the classifiers that run on
+# that mic, and a schedule mode (auto = follow schedule windows; manual = only
+# start when triggered from the dashboard or API).
+# Latitude/longitude are used for weather and per-detection coordinates.
+mics:
+  - name: "Location 1"           # friendly name shown in the dashboard and MQTT
+    latitude: null
+    longitude: null
+    device: null                 # PipeWire source name, e.g. alsa_input.usb-...
+    classifiers:
+      - bird
+      - bee
+    schedule: auto
+  - name: "Hydrophone"
+    latitude: null
+    longitude: null
+    device: null
+    classifiers:
+      - water
+    schedule: manual
+
 # ── Output ────────────────────────────────────────────────────────────────────
 output:
   console: true
@@ -99,10 +121,27 @@ clips:
   max_per_species: 100
   species_db: output/known_species.json
 
+# ── Water acoustic index (WAI — hydrophone) ───────────────────────────────────
+# Designed for a submersible hydrophone. WAI = NDWI × bio-band RMS × ACI.
+# bio_rms_scale: tune to your hydrophone's sensitivity and deployment depth.
+water:
+  aci_scale: 0.3
+  anthro_hz: [10, 200]      # boat motors, flow rumble
+  bio_hz: [300, 5000]       # fish calls, freshwater invertebrates
+  bio_rms_scale: 0.005
+  freq_max_hz: 8000
+  freq_min_hz: 10
+  mains_hz: [50, 100, 150, 200]
+  mains_q: 30
+  min_confidence: 0.1
+  report_cooldown: 30       # seconds between repeated detections (fish chorus can be sustained)
+
 # ── MQTT (optional — set enabled: true and fill in host/credentials) ──────────
+# Host goes in this file only — do not commit a real broker address to git.
+# Credentials (username/password) always go in secrets.yaml.
 mqtt:
   enabled: false
-  host: ""                # e.g. your-broker.emqxsl.com or your own server
+  host: ""                # your broker hostname — keep blank in settings.yaml.example
   port: 1883              # 1883 for plain TCP, 8883 for TLS
   tls: false              # set true when using port 8883 / cloud brokers
   mode: direct            # 'direct' = Python connects to broker with credentials

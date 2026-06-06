@@ -3,6 +3,8 @@
 __pycache__/
 external/
 config/secrets.yaml
+config/settings.yaml
+config/autostart.yaml
 *.py[cod]
 *.egg-info/
 dist/
