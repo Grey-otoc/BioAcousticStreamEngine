@@ -22,4 +22,12 @@ if [ ! -f "config/secrets.yaml" ]; then
   [ -f "config/secrets.yaml.example" ] && cp config/secrets.yaml.example config/secrets.yaml
 fi
 
+# If an existing BASE process is already on port 8000, stop it gracefully
+# before starting so we never hit "address already in use".
+if lsof -ti tcp:8000 >/dev/null 2>&1; then
+  echo "Stopping existing BASE process on port 8000…"
+  pkill -f "ecoacoustics.main web" 2>/dev/null || true
+  sleep 1
+fi
+
 .venv/bin/python -m ecoacoustics.main web "$@"
