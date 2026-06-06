@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import yaml
-from fastapi import APIRouter
+from fastapi import APIRouter, Body
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -231,7 +231,7 @@ def delete_mic(index: int):
 
 
 @router.patch("/settings/mics/{index}")
-def update_mic(index: int, body: dict):
+def update_mic(index: int, body: dict = Body(...)):
     """Update device, classifiers, or schedule on an existing mic entry."""
     with open(_SETTINGS) as f:
         cfg = yaml.safe_load(f)
@@ -285,7 +285,7 @@ def get_autostart():
 
 
 @router.post("/settings/autostart")
-def set_autostart(body: dict):
+def set_autostart(body: dict = Body(...)):
     with open(_AUTOSTART, "w") as f:
         yaml.dump({"enabled": bool(body.get("enabled", False))}, f)
     return {"updated": True}
