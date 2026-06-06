@@ -93,7 +93,7 @@ function updateStateBanner(pipelines) {
   if (running.length === 0) {
     banner.className = 'state-banner';
     banner.querySelector('.banner-title').textContent = 'Ready to listen';
-    banner.querySelector('.banner-sub').textContent = 'Select a device and start listening, or run the automated schedule.';
+    banner.querySelector('.banner-sub').textContent = 'Configure your monitoring locations below, then press Start All.';
   } else if (running.length === 1) {
     const p = running[0];
     banner.className = `state-banner ${p.state}`;
@@ -205,7 +205,7 @@ async function pollStatus() {
       }
       const diskEl = document.getElementById('stat-disk')?.querySelector('.value');
       if (diskEl) diskEl.textContent = state.status.disk_free_gb ?? '—';
-      refreshDevicePanel();
+      loadMicClfPanel();
       _refreshSummaryStats();
     }
   } catch (_) { setConnected(false); }
@@ -240,7 +240,7 @@ function renderDashboard() {
             <div class="banner-dot"></div>
             <div class="banner-text">
               <div class="banner-title">Ready to listen</div>
-              <div class="banner-sub">Select a device and start listening, or run the automated schedule.</div>
+              <div class="banner-sub">Configure your monitoring locations below, then press Start All.</div>
             </div>
           </div>
         </div>
@@ -267,8 +267,8 @@ function renderDashboard() {
         </div>
 
         <div class="card">
-          <div class="card-title" id="device-panel-title">Recording Devices</div>
-          <div id="device-panel"><div class="empty">Loading devices...</div></div>
+          <div class="card-title">Recording Locations</div>
+          <div id="mic-clf-panel"><div class="empty">Loading...</div></div>
         </div>
       </div>
 
@@ -944,20 +944,12 @@ async function renderSchedule() {
         <div class="form-group" style="justify-content:flex-end"><button class="btn btn-primary" id="btn-add-window">Add Window</button></div>
       </div>
     </div>
-    <div class="card">
-      <div class="card-title">Recording Locations ${helpBtn('classifiers')}</div>
-      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:14px">
-        For each monitoring location, choose which microphone to record from and which species to detect.
-        Add locations under Settings → Monitoring Locations first.
-      </p>
-      <div id="mic-clf-panel"><div class="empty">Loading...</div></div>
-    </div>
   `;
   document.getElementById('w-anchor').addEventListener('change', e =>
     document.getElementById('fixed-time-group').style.display = e.target.value === 'fixed' ? '' : 'none'
   );
   document.getElementById('btn-add-window').addEventListener('click', addWindow);
-  await Promise.all([loadSchedule(), loadMicClfPanel()]);
+  await loadSchedule();
 }
 
 const _CLF_META = {
