@@ -147,8 +147,13 @@ def _mic_key(name: str) -> str:
 
 
 @router.post("/pipeline/start_mics")
-def start_mics(mode: str = "schedule"):
-    """Start one pipeline per configured monitoring location that has classifiers assigned."""
+def start_mics(name: str = ""):
+    """Start one pipeline per configured monitoring location that has classifiers assigned.
+
+    Pass name= to start a single location; omit to start all configured locations.
+    Each location's own schedule field (auto | manual) determines whether it runs
+    against the schedule windows or starts in immediate listen-now (wake) mode.
+    """
     with open(Path("config/settings.yaml")) as f:
         cfg = yaml.safe_load(f)
 
@@ -156,6 +161,10 @@ def start_mics(mode: str = "schedule"):
     started, already_running, skipped = [], [], []
 
     for mic in mics:
+        # Filter to a specific location when name is supplied
+        if name and mic.get("name", "") != name:
+            continue
+
         clf_list = mic.get("classifiers") or []
         device = mic.get("device") or None
 
@@ -175,7 +184,9 @@ def start_mics(mode: str = "schedule"):
         mgr = _ensure_pipeline(key, device_index=None, device_name=mic["name"],
                                config_override=config_override, mic_name=mic["name"])
 
-        ok = mgr.start_schedule() if mode == "schedule" else mgr.start_wake()
+        # Respect per-location schedule setting: manual → wake now, auto → follow schedule
+        mic_mode = mic.get("schedule", "auto")
+        ok = mgr.start_wake() if mic_mode == "manual" else mgr.start_schedule()
         (started if ok else already_running).append(mic["name"])
 
     if started:

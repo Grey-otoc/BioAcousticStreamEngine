@@ -1093,7 +1093,7 @@ async function loadMicClfPanel() {
 
       const actionBtn = isRunning
         ? `<button class="btn btn-sm btn-danger" onclick="_stopMic('${escHtml(micKey)}',this)">■ Stop</button>`
-        : `<button class="btn btn-sm btn-primary" onclick="_startMic(${idx},this)">▶ Start</button>`;
+        : `<button class="btn btn-sm btn-primary" data-mic-name="${escHtml(mic.name)}" onclick="_startMic(this)">▶ Start</button>`;
 
       return `
         <div class="device-row" id="mic-row-${idx}" style="flex-wrap:wrap;gap:10px;margin-bottom:8px;${isRunning ? 'border-color:var(--primary)' : ''}">
@@ -1158,11 +1158,18 @@ async function _saveMicConfig(idx) {
   }
 }
 
-async function _startMic(_idx, btn) {
+async function _startMic(btn) {
+  const micName = btn.dataset.micName || '';
   btnLoad(btn, '⟳');
   try {
-    const result = await api.post('/api/pipeline/start_mics?mode=schedule');
-    toast(`Started: ${result.started.join(', ') || 'none new'}`, 'success', 4000);
+    const url = micName
+      ? `/api/pipeline/start_mics?name=${encodeURIComponent(micName)}`
+      : '/api/pipeline/start_mics';
+    const result = await api.post(url);
+    const msg = result.started.length
+      ? `Started: ${result.started.join(', ')}`
+      : result.skipped.length ? 'No classifiers configured for this location' : 'Already running';
+    toast(msg, result.started.length ? 'success' : 'warn', 4000);
     await pollStatus();
     await loadMicClfPanel();
   } catch (err) {
@@ -1188,7 +1195,7 @@ async function _startAllMics() {
   const btn = document.getElementById('btn-start-all-mics');
   btnLoad(btn, '⟳ Starting…');
   try {
-    const result = await api.post('/api/pipeline/start_mics?mode=schedule');
+    const result = await api.post('/api/pipeline/start_mics');
     const msg = result.started.length
       ? `Started: ${result.started.join(', ')}`
       : result.skipped.length ? 'No locations have classifiers configured' : 'All already running';
