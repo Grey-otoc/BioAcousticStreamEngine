@@ -2489,7 +2489,7 @@ function _startServerSpectrogram(pipewireSource) {
   _spec.evtSource.onmessage = (e) => {
     if (!_spec.running) return;
     try { _spec.serverData = JSON.parse(e.data); } catch { return; }
-    if (!_spec.animFrame) _spec.animFrame = requestAnimationFrame(_specDraw);
+    // rAF loop is already running — just update the data buffer
   };
 
   _spec.evtSource.onerror = () => {
@@ -2500,6 +2500,9 @@ function _startServerSpectrogram(pipewireSource) {
       if (btn) btn.textContent = '▶ Start';
     }
   };
+
+  // Start the continuous 60fps draw loop — reuses last SSE data between messages
+  _spec.animFrame = requestAnimationFrame(_specDraw);
 }
 
 // Browser captures audio via getUserMedia (used when no location is selected).
@@ -2590,11 +2593,13 @@ function _specDraw() {
 
   let data;
   if (_spec.serverMode) {
-    // Server sends a fresh FFT array via SSE; consume it once then wait for next message
+    // Reuse last SSE data — new data arrives at ~23fps but rAF loop runs at 60fps.
+    // This keeps scrolling smooth; each FFT frame naturally spans ~3 draw columns.
     data = _spec.serverData;
-    _spec.serverData = null;
-    _spec.animFrame = null;  // re-triggered by next SSE message, not rAF loop
-    if (!data) return;
+    if (!data) {
+      _spec.animFrame = requestAnimationFrame(_specDraw);
+      return;  // waiting for first SSE message
+    }
   } else {
     const analyser = _spec.analyser;
     if (!analyser) return;
@@ -2633,7 +2638,7 @@ function _specDraw() {
   }
   ctx.putImageData(col, w - scroll, 0);
 
-  if (!_spec.serverMode) _spec.animFrame = requestAnimationFrame(_specDraw);
+  _spec.animFrame = requestAnimationFrame(_specDraw);
 }
 
 window.toggleSpectrogram = toggleSpectrogram;

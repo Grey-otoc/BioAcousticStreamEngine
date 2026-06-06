@@ -58,7 +58,8 @@ async def spectrogram_stream(device: str = Query("", description="PipeWire sourc
                     break   # parec exited (device removed / stopped)
 
                 samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
-                fft_mag = np.abs(np.fft.rfft(samples * _HANN))[:_BINS]
+                # Divide by FFT_SIZE to match AnalyserNode getByteFrequencyData normalisation
+                fft_mag = np.abs(np.fft.rfft(samples * _HANN))[:_BINS] / _FFT_SIZE
 
                 fft_db = 20.0 * np.log10(np.maximum(fft_mag, 1e-10))
                 fft_norm = np.clip(
