@@ -2363,7 +2363,7 @@ function _candidatesForSource(pipewireSource, browserDevices) {
   const src = pipewireSource.toLowerCase();
   const GENERIC = new Set([
     'alsa', 'input', 'output', 'fallback', 'info',
-    'usb', 'stereo', 'mono', 'audio', 'device',
+    'usb', 'stereo', 'mono', 'analog', 'digital', 'audio', 'device',
   ]);
   const keywords = src
     .replace(/[_\-.]/g, ' ')
