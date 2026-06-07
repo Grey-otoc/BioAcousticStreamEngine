@@ -47,8 +47,9 @@ async def spectrogram_stream(
     """
 
     async def generate():
-        # Hop scales with rate so temporal resolution stays ~21ms regardless of rate
-        hop = max(256, int(rate * 0.021))
+        # Hop scales with rate so temporal resolution stays ~21ms regardless of rate.
+        # Must not exceed _FFT_SIZE or the ring-buffer assignment overflows.
+        hop = min(max(256, int(rate * 0.021)), _FFT_SIZE)
 
         cmd = [
             "parec",
