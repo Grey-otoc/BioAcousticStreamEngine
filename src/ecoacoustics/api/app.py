@@ -40,7 +40,7 @@ class NoCacheStaticFiles(StaticFiles):
 
 from ecoacoustics.api import state
 from ecoacoustics.api.pipeline_manager import PipelineManager
-from ecoacoustics.api.routes import clips, detections, devices, gallery, reports, schedule, settings, spectrogram, status
+from ecoacoustics.api.routes import analytics, clips, detections, devices, gallery, reports, schedule, settings, spectrogram, status
 from ecoacoustics.output.heartbeat import heartbeat_loop
 
 CONFIG_PATH = "config/settings.yaml"
@@ -120,6 +120,7 @@ app = FastAPI(title="BioAcoustic Stream Engine (BASE)", lifespan=lifespan)
 
 # ── API routes — registered first so StaticFiles mount cannot shadow them ──
 app.include_router(status.router, prefix="/api")
+app.include_router(analytics.router, prefix="/api")
 app.include_router(schedule.router, prefix="/api")
 app.include_router(detections.router, prefix="/api")
 app.include_router(clips.router, prefix="/api")

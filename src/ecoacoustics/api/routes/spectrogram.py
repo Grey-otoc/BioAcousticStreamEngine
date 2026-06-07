@@ -27,8 +27,6 @@ router = APIRouter()
 _log = logging.getLogger(__name__)
 
 _FFT_SIZE = 4096
-_HOP = 1024                                    # 21.3ms at 48kHz → ~47fps
-_SAMPLE_RATE = 48000
 _BINS = _FFT_SIZE // 2                         # 2048 bins — matches browser frequencyBinCount
 _HANN = np.hanning(_FFT_SIZE).astype(np.float32)
 _DB_MIN = -100.0
@@ -37,20 +35,27 @@ _SMOOTH = 0.1    # low: overlap already smooths; 0.4 was double-blurring
 
 
 @router.get("/spectrogram/stream")
-async def spectrogram_stream(device: str = Query("", description="PipeWire source name")):
+async def spectrogram_stream(
+    device: str = Query("", description="PipeWire source name"),
+    rate: int = Query(48000, description="Capture sample rate (Hz). Use 384000 for bat."),
+):
     """Capture audio from a named PipeWire source and stream FFT magnitudes as SSE.
 
-    Each SSE message: ``data: [b0, …, b2047]\\n\\n`` — values 0-255, normalised
-    identically to AnalyserNode.getByteFrequencyData() output.
+    Each SSE message: ``data: {"bins": [...], "rate": <int>}\\n\\n`` — bins are 0-255
+    magnitudes (2048 values) normalised identically to AnalyserNode.getByteFrequencyData().
+    The ``rate`` field lets the browser compute correct frequency labels.
     """
 
     async def generate():
+        # Hop scales with rate so temporal resolution stays ~21ms regardless of rate
+        hop = max(256, int(rate * 0.021))
+
         cmd = [
             "parec",
             "--format=s16le",
             "--channels=1",
-            f"--rate={_SAMPLE_RATE}",
-            "--latency-msec=21",   # flush every ~1024 samples to match hop size
+            f"--rate={rate}",
+            f"--latency-msec={max(10, hop * 1000 // rate)}",
         ]
         if device:
             cmd += [f"--device={device}"]
@@ -62,7 +67,7 @@ async def spectrogram_stream(device: str = Query("", description="PipeWire sourc
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
             )
-            bytes_per_hop = _HOP * 2   # 16-bit = 2 bytes per sample
+            bytes_per_hop = hop * 2   # 16-bit = 2 bytes per sample
 
             # Ring buffer: always holds the most recent _FFT_SIZE samples
             buf = np.zeros(_FFT_SIZE, dtype=np.float32)
@@ -77,9 +82,9 @@ async def spectrogram_stream(device: str = Query("", description="PipeWire sourc
 
                 new_samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
 
-                # Slide ring buffer: drop oldest _HOP samples, append new ones
-                buf[:-_HOP] = buf[_HOP:]
-                buf[-_HOP:] = new_samples
+                # Slide ring buffer: drop oldest hop samples, append new ones
+                buf[:-hop] = buf[hop:]
+                buf[-hop:] = new_samples
 
                 # FFT on full window; divide by FFT size to match AnalyserNode normalisation
                 fft_mag = np.abs(np.fft.rfft(buf * _HANN))[:_BINS] / _FFT_SIZE
@@ -92,7 +97,7 @@ async def spectrogram_stream(device: str = Query("", description="PipeWire sourc
                     (fft_db - _DB_MIN) / _DB_RANGE * 255.0, 0.0, 255.0
                 ).astype(np.uint8)
 
-                yield f"data: {json.dumps(fft_norm.tolist())}\n\n"
+                yield f"data: {json.dumps({'bins': fft_norm.tolist(), 'rate': rate})}\n\n"
 
         except asyncio.CancelledError:
             pass
@@ -120,13 +125,17 @@ async def spectrogram_stream(device: str = Query("", description="PipeWire sourc
 
 
 @router.get("/spectrogram/audio")
-async def spectrogram_audio(device: str = Query("", description="PipeWire source name")):
+async def spectrogram_audio(
+    device: str = Query("", description="PipeWire source name"),
+    rate: int = Query(48000, description="Capture sample rate (Hz). Use 384000 for bat."),
+):
     """Stream raw PCM audio from a named PipeWire source for headphone monitoring.
 
-    Format: signed 16-bit little-endian, mono, 48000 Hz (s16le).
+    Format: signed 16-bit little-endian, mono, <rate> Hz (s16le).
     The browser decodes this via an AudioWorklet and routes it to the speakers.
-    A separate parec process is spawned per connection so the FFT stream and the
-    audio monitor stream can run independently and be started/stopped separately.
+    For bat mode (rate=384000) the browser decimates by 8 to achieve frequency division
+    into the audible range.  A separate parec process is spawned per connection so the
+    FFT stream and the audio monitor stream can run independently.
     """
 
     async def generate():
@@ -134,7 +143,7 @@ async def spectrogram_audio(device: str = Query("", description="PipeWire source
             "parec",
             "--format=s16le",
             "--channels=1",
-            f"--rate={_SAMPLE_RATE}",
+            f"--rate={rate}",
             "--latency-msec=40",   # low latency for monitoring feel
         ]
         if device:
@@ -174,7 +183,7 @@ async def spectrogram_audio(device: str = Query("", description="PipeWire source
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
             "X-Audio-Format": "s16le",
-            "X-Audio-Rate": str(_SAMPLE_RATE),
+            "X-Audio-Rate": str(rate),
             "X-Audio-Channels": "1",
         },
     )

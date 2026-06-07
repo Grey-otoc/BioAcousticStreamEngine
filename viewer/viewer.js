@@ -2,8 +2,11 @@
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
+// Application version — update here when releasing. Keep in sync with pyproject.toml.
+const BASE_VERSION = '1.1.0';
+
 const DB_NAME    = 'base-viewer';
-const DB_VERSION = 1;
+const DB_VERSION = 1;  // IndexedDB schema version — only increment on schema changes
 const MAX_SOUNDS = 5;
 const MAX_SIMULTANEOUS_AUDIO = 3;
 const MAX_GALLERY_ENTRIES = 200;  // hard DOM cap regardless of retention setting
@@ -855,6 +858,10 @@ async function init() {
 
   const yearEl = document.getElementById('footer-year');
   if (yearEl) yearEl.textContent = new Date().getFullYear();
+
+  // Stamp version into header and about modal
+  const verEls = [document.getElementById('viewer-version'), document.getElementById('about-version')];
+  verEls.forEach(el => { if (el) el.textContent = `v${BASE_VERSION}`; });
 
   // Restore explainer hidden state
   try {

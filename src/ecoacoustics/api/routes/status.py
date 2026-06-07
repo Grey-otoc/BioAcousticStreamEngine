@@ -26,7 +26,8 @@ router = APIRouter()
 try:
     _VERSION = version("ecoacoustics")
 except PackageNotFoundError:
-    _VERSION = "0.1.0"
+    # Keep in sync with pyproject.toml [project] version
+    _VERSION = "1.1.0"
 
 
 def _ensure_pipeline(device_key: str, device_index=None, device_name: str = "Default",

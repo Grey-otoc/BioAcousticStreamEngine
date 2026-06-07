@@ -42,7 +42,9 @@ This project was born from a belief that technology can bring people closer to t
 - **Session summaries** — per-window species totals with max and average confidence
 - **Live MQTT streaming** — every detection published as JSON in real time; direct or bridge connection; configurable via web UI; each payload carries full site and monitoring-location coordinates and current weather
 - **Browser dashboard** — full web UI for live monitoring; per-microphone device assignment, classifier selection, and schedule control all on the dashboard; audio clips, reports, and settings
-- **Live spectrogram** — real-time audio frequency display with location-name dropdown (switches the audio input to the selected monitoring location's microphone); headphone monitoring button to listen in live
+- **Live spectrogram** — real-time audio frequency display with location-name dropdown; classifier-specific presets auto-zoom to the relevant frequency band (birds 0.3–12 kHz, bats 15–120 kHz, bees 0.08–4 kHz, insects 3–20 kHz, soil 0.03–2 kHz, water 0.01–8 kHz) and tune sensitivity accordingly; headphone monitoring; bat streams at 384 kHz with browser-side frequency division to bring ultrasonic calls into audible range
+- **Analytics dashboard** — historical overview with date-range and multi-select filters for locations and classifiers; activity-over-time chart (Chart.js) with optional Open-Meteo weather overlay (temperature, rainfall); species cards with trend vs the previous equal-length period; interactive Leaflet map of monitoring locations styled in brand colours with auto-fitBounds
+- **Kiosk mode** — `start_kiosk.sh` launches Chrome or Firefox in full-screen kiosk mode pointing at `localhost:8000`; `install.sh` creates a desktop shortcut and an `~/.config/autostart/` entry so the display comes up automatically on login
 - **Species gallery** — live photo grid that populates as species are detected; confidence filter, detection counts, CC attribution overlays; replace stock images with your own photographs via the built-in upload tool
 - **BASE Viewer** — a separate ambient display page (`/viewer/`) showing live species detections as a full-screen photo grid with sounds; suitable for kiosks, public screens, and Yodeck deployments; PWA-ready with service worker caching for instant load from home screen; reconnects to MQTT automatically when returning from background
 - **Extensible architecture** — water, insect, and additional classifiers slot in via the REGISTRY pattern
@@ -202,6 +204,7 @@ A browser tab opens automatically at `http://localhost:8000`. A desktop launcher
 | **Schedule** | Today's listening windows, add/remove custom windows |
 | **Clips** | Browse saved audio clips by species and classifier, play in browser, delete clips |
 | **Reports** | Date and species filtering, daily summary table, download detections/sessions as CSV, clear all logs |
+| **Analytics** | Date-range and multi-select filters (locations, classifiers, confidence); activity-over-time chart with Open-Meteo weather overlay; species trend cards vs previous period; Leaflet map of monitoring locations |
 | **Settings** | Recording location (name, lat/lon), monitoring locations (mics list with individual lat/lon), MQTT broker configuration with connection test, classifier device and location assignment |
 | **Viewer** | Ambient full-screen species gallery served at `/viewer/`; connects directly to the MQTT broker; suitable for kiosks and public displays — see [BASE Viewer](#base-viewer) |
 
@@ -295,6 +298,28 @@ Cards automatically disappear once a species hasn't been detected for longer tha
 ### Explainer panel
 
 A collapsible **How BASE Works** panel explains the system to visitors. Click **✕** to hide it (preference is remembered); click **ℹ** in the header to show it again.
+
+---
+
+## Kiosk Mode
+
+`install.sh` creates two launch shortcuts during installation:
+
+- **Desktop shortcut** — `~/Desktop/base-kiosk.desktop` (double-click to open BASE in full-screen kiosk mode)
+- **Autostart entry** — `~/.config/autostart/base-kiosk.desktop` launches the kiosk automatically on desktop login
+
+Both shortcuts invoke `start_kiosk.sh`, which:
+
+1. Waits up to 60 seconds for the BASE server to become available at `localhost:8000`
+2. Launches the browser in full-screen kiosk mode — tries `google-chrome`, then `chromium-browser`, `chromium`, and finally `firefox` in that order
+
+To start the kiosk manually:
+
+```bash
+bash start_kiosk.sh
+```
+
+The kiosk browser opens with popups, address bar, and desktop decorations hidden, making it suitable for public-facing displays. Pair with the [Running 24/7](#running-247-continuous-monitoring) steps to have BASE and the kiosk come up automatically after a power cycle.
 
 ---
 
@@ -714,6 +739,7 @@ Times shift daily with sunrise/sunset. Run `status` to see exact times for today
 │   │       ├── status.py           # Pipeline start/stop, system status
 │   │       ├── schedule.py         # Listening window CRUD
 │   │       ├── detections.py       # Detection history and summary
+│   │       ├── analytics.py        # Analytics API (stats, activity, species, locations)
 │   │       ├── clips.py            # Audio clip library
 │   │       ├── reports.py          # CSV downloads and log management
 │   │       ├── devices.py          # Audio input device listing
@@ -750,6 +776,7 @@ Times shift daily with sunrise/sunset. Run `status` to see exact times for today
 ├── tests/
 │   └── test_pipeline.py
 ├── start_web.sh                    # One-click web UI launcher
+├── start_kiosk.sh                  # Full-screen kiosk launcher (waits for server, opens Chrome/Firefox)
 ├── bioacoustic-stream-engine.desktop  # Desktop launcher
 └── output/                         # Created on first run
     ├── detections.csv
@@ -884,6 +911,9 @@ Restart BASE — insect detections will appear in the live feed immediately.
 - [x] Auto-resume on boot — BASE resumes recording after power cuts or restarts; configurable via dashboard
 - [x] Species activity heatmaps by time of day and season
 - [x] BASE Viewer PWA — service worker caching, instant load from home screen, automatic MQTT reconnect on return from background
+- [x] Analytics dashboard — date-range filters, activity chart with weather overlay, species trend cards, interactive monitoring-location map
+- [x] Spectrogram classifier presets — auto-zoom frequency range and sensitivity per organism type; bat frequency division for headphone monitoring
+- [x] Kiosk mode — `start_kiosk.sh` + desktop shortcut + autostart entry; full-screen Chrome/Firefox launch
 - [ ] Water classifier calibration against labelled hydrophone recordings from the Great Lake
 - [ ] Insect classifier v2 — improved model with larger training dataset
 

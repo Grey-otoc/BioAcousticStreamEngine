@@ -172,7 +172,7 @@ const router = {
     document.querySelectorAll('nav a').forEach(a =>
       a.classList.toggle('active', a.getAttribute('href') === `#${page}`)
     );
-    ({ dashboard: renderDashboard, gallery: renderGallery, schedule: renderSchedule, clips: renderClips, reports: renderReports, settings: renderSettings }[page] || renderDashboard)();
+    ({ dashboard: renderDashboard, gallery: renderGallery, schedule: renderSchedule, clips: renderClips, reports: renderReports, analytics: renderAnalytics, settings: renderSettings }[page] || renderDashboard)();
   },
 };
 
@@ -267,16 +267,19 @@ function renderDashboard() {
           </div>
           <div class="spec-panel show" id="spec-panel">
             <div class="spec-toolbar">
-              <label>Location</label>
-              <select id="spec-location" onchange="onSpecLocationChange()"><option value="">— any —</option></select>
-              <label>Mic</label>
-              <select id="spec-device" onchange="changeSpecDevice()"><option value="">System default</option></select>
-              <label><input type="checkbox" id="spec-log" style="accent-color:var(--primary)"> Log scale</label>
-              <span id="spec-active-label" style="font-size:0.78em;color:var(--muted);font-style:italic"></span>
+              <label class="spec-tb-label">Location</label>
+              <select id="spec-location" onchange="onSpecLocationChange()" class="spec-tb-select"></select>
+              <span id="spec-mic-badge" class="spec-mic-badge" style="display:none"></span>
+              <div id="spec-any-mic" style="display:flex;align-items:center;gap:6px">
+                <label class="spec-tb-label">Mic</label>
+                <select id="spec-device" onchange="changeSpecDevice()" class="spec-tb-select spec-tb-select--mic"><option value="">System default</option></select>
+              </div>
+              <label class="spec-tb-label" style="margin-left:4px"><input type="checkbox" id="spec-log" style="accent-color:var(--primary)"> Log scale</label>
             </div>
             <div class="spec-wrap">
               <canvas id="spec-canvas" width="1200" height="220"></canvas>
               <div class="spec-freq-axis" id="spec-axis"></div>
+              <div id="spec-preset-badge" class="spec-overlay-badge" style="display:none"></div>
             </div>
           </div>
         </div>
@@ -1644,6 +1647,357 @@ async function confirmClearLogs() {
 }
 
 /* ─────────────────────────── SETTINGS ─────────────────────────── */
+/* ── Analytics Dashboard ── */
+
+let _analyticsChart = null;
+let _analyticsMap   = null;
+
+async function renderAnalytics() {
+  const main = document.getElementById('main');
+  const today = new Date();
+  const d30 = new Date(today); d30.setDate(today.getDate() - 29);
+  const fmt = d => d.toISOString().slice(0, 10);
+  const dflt_from = fmt(d30);
+  const dflt_to   = fmt(today);
+
+  main.innerHTML = `
+    <div class="card an-filters">
+      <div class="an-filter-row">
+        <div class="an-filter-group">
+          <label class="an-label">Date range</label>
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="date" id="an-from" class="form-input an-date" value="${dflt_from}">
+            <span style="color:var(--muted);font-size:0.8rem">–</span>
+            <input type="date" id="an-to" class="form-input an-date" value="${dflt_to}">
+          </div>
+        </div>
+
+        <div class="an-filter-group">
+          <label class="an-label">Locations <span class="an-hint">(ctrl+click to multi-select)</span></label>
+          <select id="an-locations" multiple class="an-multi"></select>
+        </div>
+
+        <div class="an-filter-group">
+          <label class="an-label">Classifiers <span class="an-hint">(ctrl+click to multi-select)</span></label>
+          <select id="an-taxa" multiple class="an-multi"></select>
+        </div>
+
+        <div class="an-filter-group" style="min-width:160px">
+          <label class="an-label">Min confidence — <span id="an-conf-val" style="color:var(--primary)">0%</span></label>
+          <input type="range" id="an-conf" min="0" max="1" step="0.05" value="0"
+            oninput="document.getElementById('an-conf-val').textContent=Math.round(this.value*100)+'%'"
+            style="width:100%;accent-color:var(--primary);margin-top:6px">
+        </div>
+
+        <div class="an-filter-group" style="justify-content:flex-end;flex-direction:row;align-items:flex-end;gap:16px;flex:0 0 auto">
+          <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:var(--muted);cursor:pointer;white-space:nowrap">
+            <input type="checkbox" id="an-weather" style="accent-color:var(--primary);width:15px;height:15px" checked>
+            Weather overlay
+          </label>
+          <button class="btn btn-primary" onclick="loadAnalytics()">Load</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="an-stats" class="an-stats-row"></div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">Activity over time</div>
+      <div style="position:relative;height:260px">
+        <canvas id="an-chart"></canvas>
+      </div>
+      <div id="an-chart-legend" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;font-size:0.78rem"></div>
+    </div>
+
+    <div class="an-bottom-grid">
+      <div class="card">
+        <div class="card-title">Monitoring locations</div>
+        <div id="an-map" style="height:340px;border-radius:var(--radius);overflow:hidden;background:var(--surface2)"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Species activity</div>
+        <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:0 8px;font-size:0.7rem;color:var(--muted);padding:0 0 6px;border-bottom:1px solid var(--border);margin-bottom:4px">
+          <span>Species</span><span style="text-align:right">Count</span><span style="text-align:right">vs prev</span><span style="text-align:right">Conf</span>
+        </div>
+        <div id="an-species" style="max-height:306px;overflow-y:auto"></div>
+      </div>
+    </div>
+  `;
+
+  // Populate filter dropdowns
+  try {
+    const [locs] = await Promise.all([
+      api.get('/api/reports/locations').catch(() => ({ locations: [] })),
+    ]);
+    const locSel = document.getElementById('an-locations');
+    (locs.locations || []).forEach(l => {
+      const o = document.createElement('option'); o.value = l; o.textContent = l; locSel.appendChild(o);
+    });
+    const taxaSel = document.getElementById('an-taxa');
+    ['bird', 'bat', 'bee', 'insect', 'soil', 'water'].forEach(c => {
+      const o = document.createElement('option'); o.value = c; o.textContent = c.charAt(0).toUpperCase() + c.slice(1); taxaSel.appendChild(o);
+    });
+  } catch (e) { /* ignore */ }
+
+  loadAnalytics();
+}
+
+function _anFilters() {
+  const locSel  = document.getElementById('an-locations');
+  const taxaSel = document.getElementById('an-taxa');
+  const selVals = sel => Array.from(sel?.selectedOptions || []).map(o => o.value).filter(Boolean);
+  return {
+    date_from:  document.getElementById('an-from')?.value || '',
+    date_to:    document.getElementById('an-to')?.value || '',
+    locations:  selVals(locSel).join(','),
+    classifiers: selVals(taxaSel).join(','),
+    confidence: parseFloat(document.getElementById('an-conf')?.value || '0'),
+    weather:    document.getElementById('an-weather')?.checked ?? true,
+  };
+}
+
+async function loadAnalytics() {
+  const f = _anFilters();
+  const q = `date_from=${f.date_from}&date_to=${f.date_to}&locations=${encodeURIComponent(f.locations)}&classifiers=${encodeURIComponent(f.classifiers)}&confidence=${f.confidence}`;
+
+  try {
+    const [stats, activity, species, locs] = await Promise.all([
+      api.get(`/api/analytics/stats?${q}`),
+      api.get(`/api/analytics/activity?${q}`),
+      api.get(`/api/analytics/species?${q}`),
+      api.get('/api/analytics/locations'),
+    ]);
+
+    _renderAnStats(stats);
+    await _renderAnChart(activity, f);
+    _renderAnSpecies(species);
+    _renderAnMap(locs);
+  } catch (err) {
+    toast(err.message, 'error', 6000);
+  }
+}
+
+function _renderAnStats(stats) {
+  const el = document.getElementById('an-stats');
+  if (!el) return;
+  const card = (label, value, sub) => `
+    <div class="card" style="text-align:center;padding:16px 12px">
+      <div style="font-size:1.8rem;font-weight:700;color:var(--primary)">${value}</div>
+      <div style="font-size:0.78rem;color:var(--muted);margin-top:2px">${label}</div>
+      ${sub ? `<div style="font-size:0.7rem;color:var(--muted);margin-top:4px">${sub}</div>` : ''}
+    </div>`;
+  el.innerHTML =
+    card('Detections', stats.total_detections.toLocaleString()) +
+    card('Species', stats.species_count) +
+    card('Sessions', stats.session_count) +
+    card('Active days', stats.active_days, `${stats.date_from} – ${stats.date_to}`);
+}
+
+const _CLASSIFIER_COLORS = {
+  bird:   '#4adf86', bat: '#c084fc', bee: '#f5c842',
+  insect: '#ff8c42', soil: '#c2956a', water: '#42b4f5', unknown: '#888',
+};
+
+async function _renderAnChart(activity, filters) {
+  const canvas = document.getElementById('an-chart');
+  if (!canvas) return;
+
+  if (_analyticsChart) { _analyticsChart.destroy(); _analyticsChart = null; }
+
+  const dates = activity.dates || [];
+  const classifiers = activity.classifiers || [];
+
+  // Build datasets: one per classifier
+  const datasets = classifiers.map(clf => ({
+    label: clf.charAt(0).toUpperCase() + clf.slice(1),
+    data: dates.map(d => (activity.current[d]?.[clf] || 0)),
+    borderColor: _CLASSIFIER_COLORS[clf] || '#888',
+    backgroundColor: (_CLASSIFIER_COLORS[clf] || '#888') + '22',
+    fill: true,
+    tension: 0.3,
+    pointRadius: dates.length > 60 ? 0 : 3,
+  }));
+
+  // Weather overlay (temperature + precipitation)
+  let weatherData = null;
+  if (filters.weather && filters.date_from && filters.date_to) {
+    try {
+      const lat = 51.8403, lon = -1.3625;
+      const wUrl = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${filters.date_from}&end_date=${filters.date_to}&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max&timezone=Europe%2FLondon`;
+      const wr = await fetch(wUrl);
+      if (wr.ok) weatherData = await wr.json();
+    } catch { /* weather is optional */ }
+  }
+
+  if (weatherData?.daily) {
+    const wDates  = weatherData.daily.time || [];
+    const wTemps  = weatherData.daily.temperature_2m_max || [];
+    const wRain   = weatherData.daily.precipitation_sum || [];
+    datasets.push({
+      label: 'Temp °C',
+      data: dates.map(d => { const i = wDates.indexOf(d); return i >= 0 ? wTemps[i] : null; }),
+      borderColor: '#f97316',
+      borderDash: [4, 3],
+      backgroundColor: 'transparent',
+      fill: false,
+      tension: 0.3,
+      pointRadius: 0,
+      yAxisID: 'y2',
+    });
+    datasets.push({
+      label: 'Rain mm',
+      data: dates.map(d => { const i = wDates.indexOf(d); return i >= 0 ? wRain[i] : null; }),
+      borderColor: '#38bdf8',
+      backgroundColor: '#38bdf822',
+      fill: true,
+      tension: 0.2,
+      pointRadius: 0,
+      yAxisID: 'y3',
+      type: 'bar',
+    });
+  }
+
+  _analyticsChart = new Chart(canvas, {
+    type: 'line',
+    data: { labels: dates, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y ?? '—'}` } },
+      },
+      scales: {
+        x: {
+          ticks: { color: 'var(--muted)', maxTicksLimit: 12, maxRotation: 0 },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+        },
+        y: {
+          position: 'left',
+          ticks: { color: 'var(--muted)' },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          title: { display: true, text: 'Detections', color: 'var(--muted)', font: { size: 11 } },
+        },
+        y2: {
+          position: 'right',
+          display: weatherData != null,
+          ticks: { color: '#f97316' },
+          grid: { drawOnChartArea: false },
+          title: { display: weatherData != null, text: 'Temp °C', color: '#f97316', font: { size: 11 } },
+        },
+        y3: {
+          position: 'right',
+          display: false,
+          min: 0,
+        },
+      },
+    },
+  });
+
+  // Custom legend
+  const legend = document.getElementById('an-chart-legend');
+  if (legend) {
+    legend.innerHTML = datasets.map(ds => `
+      <span style="display:flex;align-items:center;gap:4px">
+        <span style="display:inline-block;width:14px;height:3px;background:${ds.borderColor};border-radius:2px"></span>
+        <span style="color:var(--muted)">${ds.label}</span>
+      </span>`).join('');
+  }
+}
+
+function _renderAnSpecies(data) {
+  const el = document.getElementById('an-species');
+  if (!el) return;
+  const species = data.species || [];
+  if (!species.length) { el.innerHTML = '<div class="empty">No detections in selected period</div>'; return; }
+
+  el.innerHTML = species.map(s => {
+    const trend = s.trend_pct;
+    const trendStr = s.prev_count
+      ? `<span style="color:${trend >= 0 ? 'var(--primary)' : 'var(--danger)'}">${trend >= 0 ? '▲' : '▼'} ${Math.abs(trend).toFixed(0)}%</span>`
+      : '<span style="color:var(--muted);font-size:0.7rem">new</span>';
+    const conf = s.avg_confidence ? `${(s.avg_confidence * 100).toFixed(0)}%` : '—';
+    const clrDot = _CLASSIFIER_COLORS[s.classifier] || '#888';
+    return `<div style="display:grid;grid-template-columns:8px 1fr auto auto auto;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+      <span style="width:8px;height:8px;border-radius:50%;background:${clrDot}"></span>
+      <span style="font-size:0.83rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${escHtml(s.species)}">${escHtml(s.species)}</span>
+      <span style="font-size:0.8rem;color:var(--muted);text-align:right">${s.count.toLocaleString()}</span>
+      <span style="font-size:0.75rem;text-align:right;min-width:48px">${trendStr}</span>
+      <span style="font-size:0.72rem;color:var(--muted);text-align:right;min-width:34px">${conf}</span>
+    </div>`;
+  }).join('');
+}
+
+function _renderAnMap(locsData) {
+  const container = document.getElementById('an-map');
+  if (!container) return;
+
+  const locs = locsData.locations || [];
+  const site = locsData.site || {};
+
+  if (_analyticsMap) { _analyticsMap.remove(); _analyticsMap = null; }
+
+  const siteLat = site.latitude || 51.8403;
+  const siteLon = site.longitude || -1.3625;
+
+  _analyticsMap = L.map('an-map', { zoomControl: true, attributionControl: true })
+    .setView([siteLat, siteLon], 15);
+
+  // CartoDB Dark Matter — free, no API key, works offline once cached
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright" style="color:#52b788">OpenStreetMap</a> © <a href="https://carto.com/attributions" style="color:#52b788">CARTO</a>',
+    subdomains: 'abcd',
+    maxZoom: 20,
+  }).addTo(_analyticsMap);
+
+  const maxDet = Math.max(1, ...locs.map(l => l.detections));
+  const bounds = [];
+
+  locs.forEach(loc => {
+    if (!loc.latitude || !loc.longitude) return;
+    bounds.push([loc.latitude, loc.longitude]);
+    const r = 9 + Math.round((loc.detections / maxDet) * 14);
+    const clfs = (loc.classifiers || []).join(', ') || 'none';
+    const col = _CLASSIFIER_COLORS[loc.classifiers?.[0]] || '#52b788';
+    const noDevice = !loc.has_device;
+    const marker = L.circleMarker([loc.latitude, loc.longitude], {
+      radius: r,
+      color: col,
+      fillColor: col,
+      fillOpacity: noDevice ? 0.2 : 0.65,
+      weight: 2,
+    }).addTo(_analyticsMap);
+
+    const badge = noDevice ? '<br><em style="color:#f59e0b;font-size:0.78em">No device assigned</em>' : '';
+    marker.bindPopup(
+      `<strong style="color:#52b788">${escHtml(loc.name)}</strong><br>
+       <span style="font-size:0.82em;color:#a0b8a8">Classifiers: ${escHtml(clfs)}</span><br>
+       <span style="font-size:0.82em">Detections: <strong>${loc.detections.toLocaleString()}</strong></span>${badge}`,
+      { maxWidth: 220 }
+    );
+
+    // Permanent label below marker
+    L.marker([loc.latitude, loc.longitude], {
+      icon: L.divIcon({
+        className: '',
+        html: `<div class="an-map-label">${escHtml(loc.name)}</div>`,
+        iconAnchor: [0, -r - 4],
+      }),
+      interactive: false,
+    }).addTo(_analyticsMap);
+  });
+
+  // Fit to markers if we have any; otherwise stay on site centre
+  if (bounds.length > 1) {
+    _analyticsMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 });
+  } else if (bounds.length === 1) {
+    _analyticsMap.setView(bounds[0], 16);
+  }
+}
+
+window.loadAnalytics = loadAnalytics;
+
 async function renderSettings() {
   document.getElementById('main').innerHTML = `
     <div class="card">
@@ -2240,7 +2594,40 @@ const _spec = {
   monitorGainNode: null, // GainNode between worklet and destination
   monitorAbort: null,    // AbortController for the fetch PCM stream
   monitorReader: null,   // ReadableStreamDefaultReader for the PCM stream
+  preset: null,          // active classifier preset {fMin, fMax, label, color, rate, decimation}
+  sampleRate: 48000,     // actual capture rate of the current stream
 };
+
+// Per-classifier spectrogram display presets.
+// fMin/fMax: frequency range to display (Hz).  rate: parec capture rate.
+// decimation: for audio monitor — take every Nth sample to shift freqs into audible range.
+const _SPEC_PRESETS = {
+  bird:   { fMin: 300,   fMax: 12000,  minDb: -90, maxDb: -30, rate: 48000,  decimation: 1, label: 'Bird 0.3–12 kHz',       color: '#4adf86' },
+  bee:    { fMin: 80,    fMax: 4000,   minDb: -90, maxDb: -20, rate: 48000,  decimation: 1, label: 'Bee 0.08–4 kHz',         color: '#f5c842' },
+  insect: { fMin: 3000,  fMax: 20000,  minDb: -85, maxDb: -25, rate: 48000,  decimation: 1, label: 'Orthoptera 3–20 kHz',    color: '#ff8c42' },
+  soil:   { fMin: 30,    fMax: 2000,   minDb: -95, maxDb: -20, rate: 48000,  decimation: 1, label: 'Soil 0.03–2 kHz',        color: '#c2956a' },
+  water:  { fMin: 10,    fMax: 8000,   minDb: -95, maxDb: -25, rate: 48000,  decimation: 1, label: 'Water 0.01–8 kHz',       color: '#42b4f5' },
+  bat:    { fMin: 15000, fMax: 120000, minDb: -90, maxDb: -30, rate: 384000, decimation: 8, label: 'Bat 15–120 kHz',         color: '#c084fc' },
+};
+
+// Resolve a preset from an array of classifier names (e.g. ['bird','bee']).
+// If multiple classifiers are active, merges their frequency ranges so all are visible.
+function _resolveSpecPreset(classifiers) {
+  if (!classifiers || !classifiers.length) return null;
+  const active = classifiers.map(c => _SPEC_PRESETS[c]).filter(Boolean);
+  if (!active.length) return null;
+  if (active.length === 1) return { ...active[0] };
+  return {
+    fMin: Math.min(...active.map(p => p.fMin)),
+    fMax: Math.max(...active.map(p => p.fMax)),
+    minDb: Math.min(...active.map(p => p.minDb)),
+    maxDb: Math.max(...active.map(p => p.maxDb)),
+    rate: Math.max(...active.map(p => p.rate)),
+    decimation: Math.max(...active.map(p => p.decimation)),
+    label: active.map(p => p.label).join(' + '),
+    color: active[0].color,
+  };
+}
 
 // Viridis-inspired colormap scaled to BASE's green theme
 function _specColor(v) {
@@ -2254,16 +2641,39 @@ function _specColor(v) {
   return            [255, 80,  30];           // hot red-orange
 }
 
-function _buildFreqAxis(sampleRate, logScale) {
+function _fmtHz(f) {
+  if (f >= 1000) return (f / 1000).toFixed(f % 1000 ? 1 : 0) + 'k';
+  return String(Math.round(f));
+}
+
+function _buildFreqAxis(sampleRate, logScale, preset) {
   const el = document.getElementById('spec-axis');
   if (!el) return;
   const nyquist = sampleRate / 2;
-  const labels = logScale
-    ? [nyquist, 16000, 8000, 4000, 2000, 1000, 500, 200, 50]
-    : [nyquist, Math.round(nyquist*0.75), Math.round(nyquist*0.5), Math.round(nyquist*0.25), 0];
-  el.innerHTML = labels
-    .map(f => `<span>${f >= 1000 ? (f/1000).toFixed(f%1000?1:0)+'k' : f}</span>`)
-    .join('');
+  const fMin = preset?.fMin ?? 0;
+  const fMax = preset?.fMax ?? nyquist;
+  let labels;
+  if (logScale) {
+    // Log-spaced labels within the preset range
+    const logMin = Math.log10(Math.max(fMin, 1));
+    const logMax = Math.log10(Math.max(fMax, 1));
+    labels = [0, 0.25, 0.5, 0.75, 1].map(t => Math.round(Math.pow(10, logMax - t * (logMax - logMin))));
+  } else {
+    labels = [fMax, fMin + (fMax-fMin)*0.75, fMin + (fMax-fMin)*0.5, fMin + (fMax-fMin)*0.25, fMin].map(Math.round);
+  }
+  el.innerHTML = labels.map(f => `<span>${_fmtHz(f)}</span>`).join('');
+
+  // Coloured preset badge next to the axis
+  const badge = document.getElementById('spec-preset-badge');
+  if (badge) {
+    if (preset) {
+      badge.textContent = preset.label;
+      badge.style.color = preset.color;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
 }
 
 // Populate both the Location dropdown (monitoring locations) and the Mic dropdown
@@ -2299,9 +2709,10 @@ async function _populateSpecDevices() {
     for (const mic of (mics || [])) {
       if (!mic.device) continue;
       const opt = document.createElement('option');
-      opt.value           = mic.device;  // PipeWire source name
-      opt.dataset.micName = mic.name;
-      opt.textContent     = mic.name;
+      opt.value               = mic.device;  // PipeWire source name
+      opt.dataset.micName     = mic.name;
+      opt.dataset.classifiers = JSON.stringify(mic.classifiers || []);
+      opt.textContent         = mic.name;
       locSel.appendChild(opt);
     }
 
@@ -2323,8 +2734,13 @@ async function _populateSpecDevices() {
 function _fillMicDropdown(pipewireSource, apiDevices, browserDevices, devSel, preferDeviceId) {
   devSel.innerHTML = '<option value="">System default</option>';
 
+  const anyMicEl  = document.getElementById('spec-any-mic');
+  const micBadge  = document.getElementById('spec-mic-badge');
+
   if (!pipewireSource) {
-    // No location — list every browser device so the user can pick freely
+    // No location — show the mic picker with all browser devices
+    if (anyMicEl)  anyMicEl.style.display  = 'flex';
+    if (micBadge)  micBadge.style.display   = 'none';
     for (const d of browserDevices) {
       const opt = document.createElement('option');
       opt.value       = d.deviceId;
@@ -2335,33 +2751,30 @@ function _fillMicDropdown(pipewireSource, apiDevices, browserDevices, devSel, pr
     return;
   }
 
-  // Look up the friendly label from the Devices API — same label as Recording Locations
-  const apiEntry    = (apiDevices || []).find(d => d.name === pipewireSource);
-  const displayName = apiEntry?.label || pipewireSource;
+  // Location selected — mic is determined automatically; hide the full picker,
+  // show a compact badge with the configured mic name instead.
+  const locSel    = document.getElementById('spec-location');
+  const micName   = locSel?.selectedOptions[0]?.dataset.micName || '';
+  const apiEntry  = (apiDevices || []).find(d => d.name === pipewireSource);
+  // Prefer the configured mic name; fall back to API label, then a shortened PipeWire name
+  const displayName = micName || apiEntry?.label
+    || pipewireSource.split('.').filter(p => p && !/^\d+$/.test(p)).slice(-2).join(' ');
 
-  // Find matching browser deviceId(s) via keyword heuristic
+  if (anyMicEl) anyMicEl.style.display = 'none';
+  if (micBadge) { micBadge.textContent = displayName; micBadge.style.display = 'inline-flex'; }
+
+  // Still populate devSel so server-mode / fallback paths have a value
   const candidates = _candidatesForSource(pipewireSource, browserDevices);
-
   if (candidates.length === 0) {
-    // Browser cannot see this device — show its configured name, use system default
-    const opt = document.createElement('option');
-    opt.value       = '';
-    opt.textContent = displayName;
+    const opt = document.createElement('option'); opt.value = ''; opt.textContent = displayName;
     devSel.appendChild(opt);
-    // value stays '' → getUserMedia will use system default
   } else if (candidates.length === 1) {
-    const opt = document.createElement('option');
-    opt.value       = candidates[0].deviceId;
-    opt.textContent = displayName;
-    devSel.appendChild(opt);
-    devSel.value = candidates[0].deviceId;
+    const opt = document.createElement('option'); opt.value = candidates[0].deviceId; opt.textContent = displayName;
+    devSel.appendChild(opt); devSel.value = candidates[0].deviceId;
   } else {
-    // Ambiguous (two identical-model devices) — show both with a counter suffix
     candidates.forEach((d, i) => {
-      const opt = document.createElement('option');
-      opt.value       = d.deviceId;
-      opt.textContent = `${displayName} (${i + 1})`;
-      devSel.appendChild(opt);
+      const opt = document.createElement('option'); opt.value = d.deviceId;
+      opt.textContent = `${displayName} (${i + 1})`; devSel.appendChild(opt);
     });
     if (preferDeviceId) devSel.value = preferDeviceId;
   }
@@ -2480,23 +2893,35 @@ function _startServerSpectrogram(pipewireSource) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#0d1a10';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  _buildFreqAxis(48000, document.getElementById('spec-log')?.checked || false);
 
   const locSel = document.getElementById('spec-location');
-  const locationName = locSel?.selectedOptions[0]?.textContent || pipewireSource;
-  const indicator = document.getElementById('spec-active-label');
-  if (indicator) indicator.textContent = `Using: ${locationName}`;
+  const selectedOpt = locSel?.selectedOptions[0];
+  const classifiers = JSON.parse(selectedOpt?.dataset.classifiers || '[]');
+  const preset = _resolveSpecPreset(classifiers);
+  _spec.preset = preset;
+  _spec.sampleRate = preset?.rate || 48000;
+
+  _buildFreqAxis(_spec.sampleRate, document.getElementById('spec-log')?.checked || false, preset);
+
+  // locationName is already visible in the Location dropdown — no extra indicator needed
 
   _spec.serverMode = true;
   _spec.running = true;
   _spec.serverData = null;
 
-  const url = `/api/spectrogram/stream?device=${encodeURIComponent(pipewireSource)}`;
+  const url = `/api/spectrogram/stream?device=${encodeURIComponent(pipewireSource)}&rate=${_spec.sampleRate}`;
   _spec.evtSource = new EventSource(url);
 
   _spec.evtSource.onmessage = (e) => {
     if (!_spec.running) return;
-    try { _spec.serverData = JSON.parse(e.data); } catch { return; }
+    try {
+      const msg = JSON.parse(e.data);
+      // msg is either {bins:[...], rate:N} (new format) or a bare array (legacy)
+      _spec.serverData = msg.bins || msg;
+      if (msg.rate && msg.rate !== _spec.sampleRate) {
+        _spec.sampleRate = msg.rate;
+      }
+    } catch { return; }
     // rAF loop is already running — just update the data buffer
   };
 
@@ -2521,13 +2946,25 @@ async function _startBrowserSpectrogram() {
   try {
     _spec.stream = await navigator.mediaDevices.getUserMedia(constraints);
     const trackLabel = _spec.stream.getAudioTracks()[0]?.label || '';
-    const indicator = document.getElementById('spec-active-label');
-    if (indicator) indicator.textContent = trackLabel ? `Using: ${trackLabel}` : '';
+    const micBadge2 = document.getElementById('spec-mic-badge');
+    if (micBadge2 && trackLabel) { micBadge2.textContent = trackLabel; micBadge2.style.display = 'inline-flex'; }
+
+    // Browser mics are always 48kHz; apply preset for display range only
+    const locSel2 = document.getElementById('spec-location');
+    const selectedOpt2 = locSel2?.selectedOptions[0];
+    const cls2 = JSON.parse(selectedOpt2?.dataset.classifiers || '[]');
+    const preset2 = _resolveSpecPreset(cls2);
+    _spec.preset = preset2;
+    _spec.sampleRate = 48000;
 
     _spec.audioCtx = new AudioContext({ sampleRate: 48000 });
     _spec.analyser = _spec.audioCtx.createAnalyser();
     _spec.analyser.fftSize = 4096;
     _spec.analyser.smoothingTimeConstant = 0.1;
+    if (preset2) {
+      _spec.analyser.minDecibels = preset2.minDb;
+      _spec.analyser.maxDecibels = preset2.maxDb;
+    }
     _spec.source = _spec.audioCtx.createMediaStreamSource(_spec.stream);
     _spec.source.connect(_spec.analyser);
     _spec.freqData = new Uint8Array(_spec.analyser.frequencyBinCount);
@@ -2540,7 +2977,7 @@ async function _startBrowserSpectrogram() {
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#0d1a10';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    _buildFreqAxis(_spec.audioCtx.sampleRate, document.getElementById('spec-log')?.checked || false);
+    _buildFreqAxis(48000, document.getElementById('spec-log')?.checked || false, preset2);
 
     _spec.running = true;
     _specDraw();
@@ -2580,21 +3017,24 @@ async function _startAudioMonitor(pipewireSource) {
     _spec.monitoring = true;
     if (btn) { btn.classList.add('active'); btn.title = 'Stop listening'; }
 
-    const url = `/api/spectrogram/audio?device=${encodeURIComponent(pipewireSource)}`;
+    const captureRate = _spec.preset?.rate || 48000;
+    const decimation  = _spec.preset?.decimation || 1;
+    const url = `/api/spectrogram/audio?device=${encodeURIComponent(pipewireSource)}&rate=${captureRate}`;
     const resp = await fetch(url, { signal: _spec.monitorAbort.signal });
     if (!resp.ok) throw new Error(`Server returned ${resp.status}`);
 
     const reader = resp.body.getReader();
     _spec.monitorReader = reader;
 
-    // Read PCM chunks, convert Int16 → Float32, post to worklet
+    // Read PCM chunks, convert Int16 → Float32.
+    // For bat (decimation=8): keep every 8th sample — shifts 40kHz bat call → 5kHz audible.
     while (true) {
       const { done, value } = await reader.read();
       if (done || !_spec.monitoring) break;
-      // value is Uint8Array; reinterpret as Int16
       const i16 = new Int16Array(value.buffer, value.byteOffset, Math.floor(value.byteLength / 2));
-      const f32 = new Float32Array(i16.length);
-      for (let i = 0; i < i16.length; i++) f32[i] = i16[i] / 32768.0;
+      const outLen = Math.ceil(i16.length / decimation);
+      const f32 = new Float32Array(outLen);
+      for (let i = 0; i < outLen; i++) f32[i] = i16[i * decimation] / 32768.0;
       workletNode.port.postMessage(f32);
     }
   } catch (err) {
@@ -2610,6 +3050,8 @@ function _stopSpectrogram() {
   _spec.running = false;
   _spec.serverMode = false;
   _spec.serverData = null;
+  _spec.preset = null;
+  _spec.sampleRate = 48000;
   if (_spec.evtSource) { _spec.evtSource.close(); _spec.evtSource = null; }
   if (_spec.animFrame) { cancelAnimationFrame(_spec.animFrame); _spec.animFrame = null; }
   if (_spec.monitorGain) { _spec.monitorGain.disconnect(); _spec.monitorGain = null; }
@@ -2618,8 +3060,10 @@ function _stopSpectrogram() {
   _spec.analyser = _spec.audioCtx = _spec.stream = _spec.source = _spec.freqData = null;
   const monBtn = document.getElementById('btn-spec-monitor');
   if (monBtn) { monBtn.classList.remove('active'); monBtn.title = 'Listen in'; }
-  const indicator = document.getElementById('spec-active-label');
-  if (indicator) indicator.textContent = '';
+  const micBadge = document.getElementById('spec-mic-badge');
+  if (micBadge) micBadge.style.display = 'none';
+  const badge = document.getElementById('spec-preset-badge');
+  if (badge) badge.style.display = 'none';
 }
 
 function toggleMonitor() {
@@ -2675,6 +3119,12 @@ function _specDraw() {
   const w = canvas.width;
   const h = canvas.height;
 
+  // Map preset fMin/fMax to bin indices so only the relevant frequency range fills the canvas
+  const nyquist = (_spec.sampleRate || 48000) / 2;
+  const preset  = _spec.preset;
+  const fMinBin = preset ? Math.max(0, Math.floor(preset.fMin / nyquist * bins)) : 0;
+  const fMaxBin = preset ? Math.min(bins - 1, Math.ceil(preset.fMax / nyquist * bins)) : bins - 1;
+
   // Scroll left by 2px for readable speed
   const scroll = 2;
   const img = ctx.getImageData(scroll, 0, w - scroll, h);
@@ -2685,14 +3135,16 @@ function _specDraw() {
   const px  = col.data;
 
   for (let y = 0; y < h; y++) {
+    const t = 1 - y / h;   // 0 = bottom (fMin), 1 = top (fMax)
     let binIndex;
     if (logScale) {
-      const t = 1 - y / h;
-      binIndex = Math.floor(Math.pow(bins, t));
-      binIndex = Math.min(binIndex, bins - 1);
+      const logLow  = Math.log(Math.max(fMinBin, 1));
+      const logHigh = Math.log(Math.max(fMaxBin, 1));
+      binIndex = Math.round(Math.exp(logLow + t * (logHigh - logLow)));
     } else {
-      binIndex = Math.floor((1 - y / h) * (bins - 1));
+      binIndex = Math.floor(fMinBin + t * (fMaxBin - fMinBin));
     }
+    binIndex = Math.min(Math.max(binIndex, 0), bins - 1);
     const value = data[binIndex];
     const [r, g, b] = _specColor(value);
     for (let xi = 0; xi < scroll; xi++) {
