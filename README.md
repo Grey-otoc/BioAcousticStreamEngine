@@ -250,7 +250,7 @@ Every MQTT detection payload includes a `species_image` field (e.g. `"european_r
 
 ## BASE Viewer
 
-![BASE Viewer — ambient live species display](docs/screenshots/BASE%20Viewer.png)
+![BASE Viewer — ambient live species display](docs/screenshots/Viewer.png)
 
 The Viewer is an ambient display page served at `http://localhost:8000/viewer/`. It connects directly to your MQTT broker and shows live species detections as a full-screen photo grid with sounds — designed for kiosk screens, public displays, and remote monitoring rooms.
 
@@ -1111,7 +1111,7 @@ The Soil Acoustic Index is original research and engineering by the **Blenheim P
 
 **SAI v2** (May 2026) combines three independent gates that a signal must pass before it is reported as soil activity:
 
-- **NDSI** *(Normalised Difference Soundscape Index)* — the ratio of biological-band power (500–2000 Hz) to anthropogenic-band power (50–300 Hz). After Pijanowski et al. (2011). Strongly negative for distant jets, traffic rumble, footsteps, deep HVAC; strongly positive for biology.
+- **NDSI** *(Normalised Difference Soundscape Index, acoustic)* — the ratio of biological-band power (500–2000 Hz) to anthropogenic-band power (50–300 Hz), calculated entirely from audio frequency-band energy: `(Biophony − Anthrophony) / (Biophony + Anthrophony)`. After Pijanowski et al. (2011). Strongly negative for distant jets, traffic rumble, footsteps, deep HVAC; strongly positive for biology. *(Not to be confused with the remote-sensing NDSI used in satellite imagery for snow/soil detection — the name coincidence is unfortunate but the metric is entirely acoustic.)*
 - **Bio-band RMS** — gates true silence to zero so the classifier cannot fire on a quiet channel.
 - **Transient gate** — crest factor of the bio-band envelope. Continuous broadband sources (propeller planes, helicopters, sustained machinery) score near zero here even when their harmonic series bleeds up into the biological band, so they are suppressed too.
 
@@ -1133,7 +1133,7 @@ The Water Acoustic Index is original research and engineering by the **Blenheim 
 
 Like the Soil Acoustic Index, WAI does not wrap a pre-trained model. It is a signal-processing chain that scores each 3-second audio chunk from a submersible hydrophone using three independent terms:
 
-- **NDWI** *(Normalised Difference Water Index)* — the ratio of biological-band power (300–5000 Hz, fish calls and invertebrate activity) to anthropogenic-band power (10–200 Hz, boat motors and flow rumble). Answers: is the energy biological, or low-frequency mechanical?
+- **NDWI** *(Normalised Difference Water Index, acoustic — Blenheim coinage)* — the ratio of biological-band power (300–5000 Hz, fish calls and invertebrate activity) to anthropogenic-band power (10–200 Hz, boat motors and flow rumble), calculated from audio frequency-band energy by analogy with acoustic NDSI. Answers: is the energy biological, or low-frequency mechanical? *(This is original Blenheim terminology, not a published acoustic standard; it is also entirely unrelated to the remote-sensing NDWI used in satellite imagery to detect surface water.)*
 - **Bio-band RMS** — gates true silence to zero so the index cannot fire on a quiet channel.
 - **ACI** *(Acoustic Complexity Index)* — fish choruses and invertebrate clicks are temporally variable; steady flow noise and motor drone are monotone. ACI is high for complex, changing signals and low for repetitive background noise.
 
