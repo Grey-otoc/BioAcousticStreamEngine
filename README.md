@@ -10,21 +10,21 @@ This project was born from a belief that technology can bring people closer to t
 
 ## Screenshots
 
-| Dashboard | Schedule & Mic Selection |
+| Dashboard | Gallery |
 |---|---|
-| ![Dashboard — live detection feed and VU meter](docs/screenshots/dashboard.png) | ![Schedule — listening windows and mic assignment](docs/screenshots/Schedule%20and%20Mic%20Selection.png) |
+| ![Dashboard — live detection feed and VU meter](docs/screenshots/Dashboard.png) | ![Gallery — live photo grid with confidence filter](docs/screenshots/Gallery.png) |
 
-| Species Gallery | Image Management |
+| Schedule | Clips Library |
 |---|---|
-| ![Species Gallery — live photo grid with confidence filter](docs/screenshots/gallery.png) | ![Image Management — upload photos and edit credits](docs/screenshots/image_management.png) |
+| ![Schedule — listening windows and mic assignment](docs/screenshots/Schedule.png) | ![Clips — browse and play saved audio clips](docs/screenshots/Clips.png) |
 
-| Clips Library | Reports |
+| Reports | Analytics |
 |---|---|
-| ![Clips — browse and play saved audio clips](docs/screenshots/clips.png) | ![Reports — detection history and CSV export](docs/screenshots/reports.png) |
+| ![Reports — detection history and CSV export](docs/screenshots/Report.png) | ![Analytics — activity chart, species trends, location map](docs/screenshots/Analytics.png) |
 
-| BASE Viewer | Recording Spectrogram |
+| Settings | BASE Viewer |
 |---|---|
-| ![BASE Viewer — ambient live species display](docs/screenshots/BASE%20Viewer.png) | ![Recording Spectrogram — live audio frequency display](docs/screenshots/Recording%20Spectogram.png) |
+| ![Settings — location, MQTT, classifier and mic assignment](docs/screenshots/Settings.png) | ![BASE Viewer — ambient live species display](docs/screenshots/Viewer.png) |
 
 ---
 
