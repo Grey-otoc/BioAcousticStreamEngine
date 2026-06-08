@@ -1800,7 +1800,7 @@ function _renderAnStats(stats) {
 }
 
 const _CLASSIFIER_COLORS = {
-  bird:   '#4adf86', bat: '#c084fc', bee: '#f5c842',
+  bird:   '#90b20c', bat: '#c084fc', bee: '#f5c842',
   insect: '#ff8c42', soil: '#c2956a', water: '#42b4f5', unknown: '#888',
 };
 
@@ -1952,7 +1952,7 @@ function _renderAnMap(locsData) {
 
   // CartoDB Dark Matter — free, no API key, works offline once cached
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© <a href="https://www.openstreetmap.org/copyright" style="color:#52b788">OpenStreetMap</a> © <a href="https://carto.com/attributions" style="color:#52b788">CARTO</a>',
+    attribution: '© <a href="https://www.openstreetmap.org/copyright" style="color:#90b20c">OpenStreetMap</a> © <a href="https://carto.com/attributions" style="color:#90b20c">CARTO</a>',
     subdomains: 'abcd',
     maxZoom: 20,
   }).addTo(_analyticsMap);
@@ -1965,7 +1965,7 @@ function _renderAnMap(locsData) {
     bounds.push([loc.latitude, loc.longitude]);
     const r = 9 + Math.round((loc.detections / maxDet) * 14);
     const clfs = (loc.classifiers || []).join(', ') || 'none';
-    const col = _CLASSIFIER_COLORS[loc.classifiers?.[0]] || '#52b788';
+    const col = _CLASSIFIER_COLORS[loc.classifiers?.[0]] || '#90b20c';
     const noDevice = !loc.has_device;
     const marker = L.circleMarker([loc.latitude, loc.longitude], {
       radius: r,
@@ -1977,7 +1977,7 @@ function _renderAnMap(locsData) {
 
     const badge = noDevice ? '<br><em style="color:#f59e0b;font-size:0.78em">No device assigned</em>' : '';
     marker.bindPopup(
-      `<strong style="color:#52b788">${escHtml(loc.name)}</strong><br>
+      `<strong style="color:#90b20c">${escHtml(loc.name)}</strong><br>
        <span style="font-size:0.82em;color:#a0b8a8">Classifiers: ${escHtml(clfs)}</span><br>
        <span style="font-size:0.82em">Detections: <strong>${loc.detections.toLocaleString()}</strong></span>${badge}`,
       { maxWidth: 220 }
@@ -2608,7 +2608,7 @@ const _spec = {
 // fMin/fMax: frequency range to display (Hz).  rate: parec capture rate.
 // decimation: for audio monitor — take every Nth sample to shift freqs into audible range.
 const _SPEC_PRESETS = {
-  bird:   { fMin: 300,   fMax: 12000,  minDb: -90, maxDb: -30, rate: 48000,  decimation: 1, label: 'Bird 0.3–12 kHz',       color: '#4adf86' },
+  bird:   { fMin: 300,   fMax: 12000,  minDb: -90, maxDb: -30, rate: 48000,  decimation: 1, label: 'Bird 0.3–12 kHz',       color: '#90b20c' },
   bee:    { fMin: 80,    fMax: 4000,   minDb: -90, maxDb: -20, rate: 48000,  decimation: 1, label: 'Bee 0.08–4 kHz',         color: '#f5c842' },
   insect: { fMin: 3000,  fMax: 20000,  minDb: -85, maxDb: -25, rate: 48000,  decimation: 1, label: 'Orthoptera 3–20 kHz',    color: '#ff8c42' },
   soil:   { fMin: 30,    fMax: 2000,   minDb: -95, maxDb: -20, rate: 48000,  decimation: 1, label: 'Soil 0.03–2 kHz',        color: '#c2956a' },
