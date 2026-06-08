@@ -1,12 +1,15 @@
 """API routes — audio clip library."""
 
 import csv
+import io
 import json
 from pathlib import Path
 
+import numpy as np
+import soundfile as sf
 import yaml
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 router = APIRouter()
 _SETTINGS = Path("config/settings.yaml")
@@ -97,12 +100,18 @@ def list_clips(species_dir: str):
         parts = wav.stem.split("_")
         date_str = parts[0] if len(parts) > 0 else ""
         time_str = parts[1] if len(parts) > 1 else ""
+        try:
+            sample_rate = sf.info(str(wav)).samplerate
+        except Exception:
+            sample_rate = 48000
         clips.append({
             "filename": wav.name,
             "date": f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}" if len(date_str) == 8 else "",
             "time": f"{time_str[:2]}:{time_str[2:4]}:{time_str[4:6]}" if len(time_str) == 6 else "",
             "confidence": round(_conf_from_path(wav), 2),
+            "sample_rate": sample_rate,
             "url": f"/api/clips/{species_dir}/{wav.name}/audio",
+            "download_url": f"/api/clips/{species_dir}/{wav.name}/download",
         })
 
     return {
@@ -116,7 +125,31 @@ def stream_clip(species_dir: str, filename: str):
     path = _clips_dir() / species_dir / filename
     if not path.exists() or path.suffix != ".wav":
         raise HTTPException(404, "Clip not found")
-    return FileResponse(str(path), media_type="audio/wav")
+
+    info = sf.info(str(path))
+    if info.samplerate <= 48000:
+        return FileResponse(str(path), media_type="audio/wav")
+
+    # Ultrasonic recording (e.g. bat at 384kHz) — decimate to 48kHz for browser playback.
+    # Dividing by 8 shifts a 40kHz bat call to ~5kHz, same approach as the live monitor.
+    factor = round(info.samplerate / 48000)
+    audio, _ = sf.read(str(path), dtype="int16", always_2d=False)
+    buf = io.BytesIO()
+    sf.write(buf, audio[::factor], 48000, format="WAV", subtype="PCM_16")
+    buf.seek(0)
+    return Response(content=buf.read(), media_type="audio/wav")
+
+
+@router.get("/clips/{species_dir}/{filename}/download")
+def download_clip(species_dir: str, filename: str):
+    """Serve the original unmodified clip file as a download (e.g. 384kHz bat WAV)."""
+    path = _clips_dir() / species_dir / filename
+    if not path.exists() or path.suffix != ".wav":
+        raise HTTPException(404, "Clip not found")
+    return FileResponse(
+        str(path), media_type="audio/wav",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.delete("/clips/{species_dir}/{filename}")

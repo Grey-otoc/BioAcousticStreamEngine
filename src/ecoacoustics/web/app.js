@@ -1353,7 +1353,7 @@ async function loadSpeciesList(classifierFilter = 'all') {
 }
 
 function speciesItem(s) {
-  return `<div class="species-item" data-dir="${s.dir}" onclick="loadClips('${s.dir}','${s.name}')">
+  return `<div class="species-item" data-dir="${s.dir}" data-name="${s.name.replace(/"/g, '&quot;')}" onclick="loadClips(this.dataset.dir, this.dataset.name)">
     <span>${s.name}</span><span class="count">${s.clip_count}</span>
   </div>`;
 }
@@ -1374,12 +1374,18 @@ async function loadClips(dir, name) {
   try {
     const data = await api.get(`/api/clips/${dir}`);
     if (!data.clips.length) { grid.innerHTML = '<div class="empty">No clips for this species.</div>'; return; }
-    grid.innerHTML = data.clips.map(c => `
-      <div class="clip-row">
-        <div class="clip-meta">${ukDate(c.date)} ${c.time}<br><span class="conf ${confClass(c.confidence)}">${Math.round(c.confidence * 100)}% conf</span></div>
+    const encodedDir = encodeURIComponent(dir);
+    grid.innerHTML = data.clips.map(c => {
+      const batNote = c.sample_rate > 48000
+        ? `<br><span style="font-size:0.7rem;color:var(--muted)">🦇 ${(c.sample_rate/1000).toFixed(0)}kHz → pitched down for playback</span>`
+        : '';
+      return `<div class="clip-row">
+        <div class="clip-meta">${ukDate(c.date)} ${c.time}<br><span class="conf ${confClass(c.confidence)}">${Math.round(c.confidence * 100)}% conf</span>${batNote}</div>
         <audio controls src="${c.url}" preload="none"></audio>
-        <button class="btn btn-sm btn-danger" onclick="deleteClip('${dir}','${c.filename}',this)">✕</button>
-      </div>`).join('');
+        <a class="btn btn-sm btn-outline" href="${c.download_url}" download title="Download original WAV">↓</a>
+        <button class="btn btn-sm btn-danger" onclick="deleteClip('${encodedDir}','${encodeURIComponent(c.filename)}',this)">✕</button>
+      </div>`;
+    }).join('');
   } catch (err) { grid.innerHTML = `<div class="empty" style="color:var(--danger)">${err.message}</div>`; }
 }
 
