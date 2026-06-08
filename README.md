@@ -10,6 +10,8 @@ This project was born from a belief that technology can bring people closer to t
 
 ## Screenshots
 
+![Typical Setup — complete ecoacoustic monitoring solution](docs/screenshots/Typical%20Setup.png)
+
 | Dashboard | Gallery |
 |---|---|
 | ![Dashboard — live detection feed and VU meter](docs/screenshots/Dashboard.png) | ![Gallery — live photo grid with confidence filter](docs/screenshots/Gallery.png) |
