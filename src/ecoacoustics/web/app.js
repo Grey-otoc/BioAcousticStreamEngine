@@ -1589,8 +1589,8 @@ function renderHeatmap(containerId, species, data, colLabels) {
   const cellToColor = (v) => {
     if (!v) return 'var(--surface2)';
     const intensity = v / maxVal;
-    const l = Math.round(50 - intensity * 30);  // 50% → 20% lightness
-    return `hsl(150, 60%, ${l}%)`;
+    const l = Math.round(16 + intensity * 38);  // 16% (dim) → 54% (bright)
+    return `hsl(71, 82%, ${l}%)`;
   };
 
   // Build grid: label col + nCols data cols
@@ -1842,7 +1842,7 @@ async function _renderAnChart(activity, filters) {
     datasets.push({
       label: 'Temp °C',
       data: dates.map(d => { const i = wDates.indexOf(d); return i >= 0 ? wTemps[i] : null; }),
-      borderColor: '#f97316',
+      borderColor: '#d4a843',
       borderDash: [4, 3],
       backgroundColor: 'transparent',
       fill: false,
@@ -1853,8 +1853,8 @@ async function _renderAnChart(activity, filters) {
     datasets.push({
       label: 'Rain mm',
       data: dates.map(d => { const i = wDates.indexOf(d); return i >= 0 ? wRain[i] : null; }),
-      borderColor: '#38bdf8',
-      backgroundColor: '#38bdf822',
+      borderColor: '#5ba4d4',
+      backgroundColor: '#5ba4d422',
       fill: true,
       tension: 0.2,
       pointRadius: 0,
@@ -1877,20 +1877,20 @@ async function _renderAnChart(activity, filters) {
       scales: {
         x: {
           ticks: { color: 'var(--muted)', maxTicksLimit: 12, maxRotation: 0 },
-          grid: { color: 'rgba(255,255,255,0.05)' },
+          grid: { color: 'rgba(144,178,12,0.10)' },
         },
         y: {
           position: 'left',
           ticks: { color: 'var(--muted)' },
-          grid: { color: 'rgba(255,255,255,0.05)' },
+          grid: { color: 'rgba(144,178,12,0.10)' },
           title: { display: true, text: 'Detections', color: 'var(--muted)', font: { size: 11 } },
         },
         y2: {
           position: 'right',
           display: weatherData != null,
-          ticks: { color: '#f97316' },
+          ticks: { color: '#d4a843' },
           grid: { drawOnChartArea: false },
-          title: { display: weatherData != null, text: 'Temp °C', color: '#f97316', font: { size: 11 } },
+          title: { display: weatherData != null, text: 'Temp °C', color: '#d4a843', font: { size: 11 } },
         },
         y3: {
           position: 'right',
