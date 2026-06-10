@@ -749,6 +749,7 @@ function toggleExplainer() {
   // Mobile: open as centred modal
   const tile    = document.getElementById('explainer-tile');
   const overlay = document.getElementById('explainer-overlay');
+  document.body.classList.remove('explainer-hidden');
   const open    = tile.classList.toggle('open');
   overlay.classList.toggle('open', open);
 }
