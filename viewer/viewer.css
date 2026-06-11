@@ -564,6 +564,10 @@ body {
 .conf-high { background: rgba(30,120,40,0.90); }
 .conf-med  { background: rgba(160,100,10,0.88); }
 .conf-low  { background: rgba(180,40,40,0.82); }
+/* Text-colour variants used for activity index inside the card meta row */
+.idx-high  { color: var(--primary); }
+.idx-med   { color: var(--warning); }
+.idx-low   { color: var(--muted); }
 
 .card-sound-badge {
   position: absolute;

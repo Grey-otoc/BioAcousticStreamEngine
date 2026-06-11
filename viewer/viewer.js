@@ -26,6 +26,7 @@ const PLACEHOLDER = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
 // ── State ────────────────────────────────────────────────────────────────────
 
 const gallery    = {};   // entryId → entry  (keyed by species + site + location)
+let   _wxCache   = {};   // latest weather seen from any detection — fallback for cards with no wx
 const heartbeats = {};   // site_name → { site_name, timestamp, receivedAt }
 const imgCache  = {};   // speciesKey    → object URL (or PLACEHOLDER)
 let activeAudio   = 0;
@@ -347,12 +348,22 @@ const _WX = {
 };
 
 function _weatherStrip(det) {
-  if (det.temperature_c === null || det.temperature_c === undefined) return '';
+  // Cache fresh weather so cards that fired between fetch cycles can fall back to it.
+  if (det.temperature_c != null) {
+    _wxCache = {
+      temperature_c:    det.temperature_c,
+      wind_speed_kmh:   det.wind_speed_kmh,
+      humidity_pct:     det.humidity_pct,
+      precipitation_mm: det.precipitation_mm,
+    };
+  }
+  const wx = det.temperature_c != null ? det : _wxCache;
+  if (wx.temperature_c == null) return '';
   const parts = [];
-  if (det.temperature_c  != null) parts.push(`<span class="wx-item">${_WX.temp}${det.temperature_c.toFixed(1)}°C</span>`);
-  if (det.wind_speed_kmh != null) parts.push(`<span class="wx-item">${_WX.wind}${(det.wind_speed_kmh * 0.621371).toFixed(1)}mph</span>`);
-  if (det.humidity_pct   != null) parts.push(`<span class="wx-item">${_WX.humidity}${Math.round(det.humidity_pct)}%</span>`);
-  if (det.precipitation_mm > 0)   parts.push(`<span class="wx-item">${_WX.rain}${det.precipitation_mm}mm</span>`);
+  if (wx.temperature_c  != null) parts.push(`<span class="wx-item">${_WX.temp}${wx.temperature_c.toFixed(1)}°C</span>`);
+  if (wx.wind_speed_kmh != null) parts.push(`<span class="wx-item">${_WX.wind}${(wx.wind_speed_kmh * 0.621371).toFixed(1)}mph</span>`);
+  if (wx.humidity_pct   != null) parts.push(`<span class="wx-item">${_WX.humidity}${Math.round(wx.humidity_pct)}%</span>`);
+  if (wx.precipitation_mm > 0)   parts.push(`<span class="wx-item">${_WX.rain}${wx.precipitation_mm}mm</span>`);
   return parts.length ? `<div class="weather-strip">${parts.join('')}</div>` : '';
 }
 
@@ -379,7 +390,7 @@ function galleryCard(entry) {
         </div>
         <div class="card-sci">${det.species_scientific || ''}</div>
         <div class="card-meta-row">
-          ${det.classifier ? `<span class="card-clf">${det.classifier}</span>` : ''}
+          ${det.classifier ? `<span class="card-clf">${det.classifier}${idx != null ? ` · <span class="idx-${_indexClass(idx).replace('conf-','')}" style="font-weight:700">${idx}/50</span>` : ''}</span>` : ''}
           ${locDisplay ? `<span class="card-loc-badge">${_ICONS.pin} ${locDisplay}</span>` : ''}
         </div>
         <div class="card-times">
