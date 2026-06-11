@@ -2,7 +2,7 @@
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-// Application version — update here when releasing. Keep in sync with pyproject.toml.
+// Application version — single source of truth is pyproject.toml; scripts/sync_version.py patches this line.
 const BASE_VERSION = '1.1.0';
 
 const DB_NAME    = 'base-viewer';
@@ -144,6 +144,10 @@ function _speciesKey(name) {
 
 function _confClass(conf) {
   return conf >= 0.8 ? 'conf-high' : conf >= 0.6 ? 'conf-med' : 'conf-low';
+}
+
+function _indexClass(index) {
+  return index >= 34 ? 'conf-high' : index >= 17 ? 'conf-med' : 'conf-low';
 }
 
 function _fmtSeen(date, time) {
@@ -356,6 +360,10 @@ function galleryCard(entry) {
   const { det, key, entryId, count, bestConf, firstSeen, lastSeen } = entry;
   const pct = Math.round(bestConf * 100);
   const locDisplay = [det.site_name, det.location_name].filter(Boolean).join(' · ');
+  const idx = det.activity_index != null ? det.activity_index : null;
+  const confBadge = idx != null
+    ? `<span class="card-conf ${_indexClass(idx)}">${idx}<span style="font-size:0.65em;opacity:0.7">/50</span></span>`
+    : `<span class="card-conf ${_confClass(bestConf)}">${pct}%</span>`;
 
   return `
     <div class="gallery-card" id="card-${entryId}" onclick="showSpeciesDetail('${entryId.replace(/'/g, "\\'")}')">
@@ -363,7 +371,7 @@ function galleryCard(entry) {
         <img src="${_imgSrc(key)}" alt="${det.species_common}"
              onerror="this.onerror=null;this.src='${PLACEHOLDER}';this.classList.add('img-placeholder')">
         <span class="card-count">×${count}</span>
-        <span class="card-conf ${_confClass(bestConf)}">${pct}%</span>
+        ${confBadge}
       </div>
       <div class="card-info">
         <div class="card-name-row">
@@ -606,6 +614,7 @@ async function _renderModalBody(entryId, key, entry) {
       ${det.species_scientific ? `<em>${det.species_scientific}</em><br>` : ''}
       ${count} detection${count !== 1 ? 's' : ''} this session
       ${locDisplay ? ' · ' + locDisplay : ''}
+      ${det.activity_index != null ? `<br><span class="modal-index-badge ${_indexClass(det.activity_index)}">${det.activity_index}<span style="font-size:0.75em;opacity:0.75">/50</span></span> Activity index` : ''}
     </div>
 
     <hr class="modal-divider">

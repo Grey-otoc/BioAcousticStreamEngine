@@ -108,6 +108,7 @@ class MqttPublisher:
             "species_scientific": det.metadata.get("scientific_name", ""),
             "species_image": re.sub(r"[^a-z0-9]+", "_", det.label.lower().replace("'", "")).strip("_") + ".jpg",
             "confidence": round(det.confidence, 4),
+            "activity_index": det.metadata.get("activity_index"),
             "call_number_in_session": call_n,
             "site_name": self._location_name,
             "site_latitude": self._lat,

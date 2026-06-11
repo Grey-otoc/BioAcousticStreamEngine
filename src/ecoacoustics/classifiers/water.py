@@ -56,11 +56,17 @@ Mains / electrical interference
 A notch cascade at 50, 100, 150, 200 Hz (Q = 30) removes cable-conducted
 electrical noise common in hydrophone setups before the power-spectrum split.
 
-Activity levels
----------------
-  WAI ≥ 0.60  →  High Water Activity
-  WAI ≥ 0.30  →  Moderate Water Activity
-  WAI < 0.30  →  Low Water Activity
+Activity index and levels
+-------------------------
+An integer index from 1 to 50 is derived from the ACI term (aci_01), which
+measures the temporal complexity and burstiness that distinguishes biological
+calls from steady mechanical noise. Mapping: index = clamp(round(aci_01 × 49) + 1, 1, 50).
+
+  index 34–50  →  High Water Activity
+  index 17–33  →  Moderate Water Activity
+  index  1–16  →  Low Water Activity
+
+The activity_index is stored in Detection.metadata alongside the raw WAI score.
 
 Beta note
 ---------
@@ -191,9 +197,13 @@ class WaterClassifier(BaseClassifier):
         if wai < self._min_confidence:
             return []
 
-        if wai >= 0.60:
+        # Activity index 1–50 from ACI burstiness term (the transient-activity
+        # measure for water — high ACI = complex, variable biological signal).
+        activity_index = max(1, min(50, int(round(aci_01 * 49)) + 1))
+
+        if activity_index >= 34:
             level = "High"
-        elif wai >= 0.30:
+        elif activity_index >= 17:
             level = "Moderate"
         else:
             level = "Low"
@@ -212,6 +222,7 @@ class WaterClassifier(BaseClassifier):
                 "anthro_band_power": float(f"{anthro_p:.6e}"),
                 "bio_rms": round(bio_rms, 6),
                 "aci": round(aci, 4),
+                "activity_index": activity_index,
                 "activity_level": level,
                 "beta": True,
             },

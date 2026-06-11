@@ -95,7 +95,10 @@ sudo apt-get install -y \
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install -e "."
+git config core.hooksPath .githooks
 ```
+
+> The last line activates the pre-commit hook that keeps `viewer/viewer.js` version in sync with `pyproject.toml` automatically on every commit.
 
 #### 3. Bee classifier model (BuzzDetect)
 

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Sync pyproject.toml version → viewer/viewer.js before every commit.
+python3 scripts/sync_version.py || exit 1
+git add viewer/viewer.js

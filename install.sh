@@ -246,6 +246,9 @@ else
 fi
 ok "Python packages installed"
 
+# ── Activate pre-commit hook (version sync) ───────────────────────────────────
+git config core.hooksPath .githooks 2>/dev/null && ok "Git hooks activated (version sync)" || true
+
 # ── 3. BuzzDetect bee model ───────────────────────────────────────────────────
 step "Setting up BuzzDetect bee model"
 

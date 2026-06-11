@@ -45,7 +45,7 @@ _WEATHER_FIELDS = [
 _DETECTION_FIELDS = [
     "session_id", "window_name", "date", "time",
     "classifier", "species_common", "species_scientific",
-    "confidence", "call_number_in_session",
+    "confidence", "activity_index", "call_number_in_session",
     "location_name", "latitude", "longitude",
     *_WEATHER_FIELDS,
     "monitoring_location",   # mic/monitoring-location name (additive — blank in old rows)
@@ -170,6 +170,7 @@ class DetectionLogger:
             "species_common": det.label,
             "species_scientific": det.metadata.get("scientific_name", ""),
             "confidence": f"{det.confidence:.3f}",
+            "activity_index": det.metadata.get("activity_index", ""),
             "call_number_in_session": call_n,
             "location_name": self._location_name,
             "latitude": self._lat or "",

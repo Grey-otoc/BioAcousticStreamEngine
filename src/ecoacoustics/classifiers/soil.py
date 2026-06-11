@@ -70,14 +70,19 @@ computed and reported in metadata as ``sai_v1`` so longitudinal comparisons
 against historical detections.csv rows remain meaningful. To make v1 the
 primary score again, set ``soil.ndsi.enabled: false`` in settings.yaml.
 
-Activity levels (v2)
---------------------
-  SAI_v2 ≥ 0.65  →  High Soil Activity
-  SAI_v2 ≥ 0.35  →  Moderate Soil Activity
-  SAI_v2 < 0.35  →  Low Soil Activity
+Activity index and levels
+-------------------------
+An integer index from 1 to 50 is derived from the transient_gate term, which
+measures the burstiness of the bio-band signal on a normalised [0, 1] scale.
+Mapping: index = clamp(round(transient_gate × 49) + 1, 1, 50).
 
-These thresholds are inherited from v1 pending calibration against labelled
-recordings from a probe rod in known-quiet and known-active soil.
+  index 34–50  →  High Soil Activity
+  index 17–33  →  Moderate Soil Activity
+  index  1–16  →  Low Soil Activity
+
+When v2 is disabled the normalised SAI v1 score is used in place of
+transient_gate as the index source. The activity_index is stored in
+Detection.metadata alongside the raw SAI scores.
 
 Beta note
 ---------
@@ -236,9 +241,13 @@ class SoilClassifier(BaseClassifier):
         if confidence < self._min_confidence:
             return []
 
-        if confidence >= 0.65:
+        # Activity index 1–50 from transient burstiness (v2) or normalised SAI (v1 fallback).
+        _transient_val = transient_gate if transient_gate is not None else min(confidence, 1.0)
+        activity_index = max(1, min(50, int(round(_transient_val * 49)) + 1))
+
+        if activity_index >= 34:
             level = "High"
-        elif confidence >= 0.35:
+        elif activity_index >= 17:
             level = "Moderate"
         else:
             level = "Low"
@@ -248,6 +257,7 @@ class SoilClassifier(BaseClassifier):
             "rms_energy": round(rms, 6),
             "aci": round(aci, 4),
             "spectral_entropy": round(entropy, 4),
+            "activity_index": activity_index,
             "activity_level": level,
             "beta": True,
         }
