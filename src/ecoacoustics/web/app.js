@@ -640,6 +640,7 @@ function _fmtSeen(date, time) {
 function galleryCard(entry) {
   const { det, count, bestConf, firstSeen, lastSeen } = entry;
   const pct = Math.round(bestConf * 100);
+  const idx = det.activity_index != null ? det.activity_index : null;
   const clf = CLASSIFIERS.find(c => c.key === det.classifier);
   const icon = clf ? clf.icon : '◈';
   const key = _speciesKey(det.species_common);
@@ -669,7 +670,7 @@ function galleryCard(entry) {
         <div class="gallery-sci">${det.species_scientific || ''}</div>
         <div class="gallery-meta">
           <span class="classifier-badge">${icon} ${det.classifier}</span>
-          <span class="conf ${confClass(bestConf)}">${pct}%</span>
+          <span class="conf ${confClass(bestConf)}">${idx != null ? `${idx}/50` : `${pct}%`}</span>
         </div>
         <div class="gallery-times">
           <span title="First detected">⬆ ${firstSeen ? _fmtSeen(firstSeen.date, firstSeen.time) : '—'}</span>
