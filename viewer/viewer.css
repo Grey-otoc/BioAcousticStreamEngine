@@ -123,6 +123,79 @@ body {
   transition: color 0.4s;
 }
 #live-badge.live-on #live-loc-text { color: var(--text); }
+#live-badge { cursor: pointer; border-radius: 6px; padding: 4px 8px; transition: background 0.15s; }
+#live-badge:hover { background: rgba(255,255,255,0.05); }
+#loc-caret { color: var(--muted); flex-shrink: 0; transition: transform 0.2s; }
+#live-badge.filter-active #loc-caret { color: var(--primary); }
+
+/* ── Location filter popover ── */
+#loc-filter-panel {
+  display: none;
+  position: fixed;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 160;
+  background: rgba(6,14,6,0.97);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  min-width: 220px;
+  max-width: 320px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+}
+#loc-filter-panel.open { display: block; }
+.loc-filter-header {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.loc-filter-divider { height: 1px; background: var(--border); margin: 8px 0; }
+.loc-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.84rem;
+  color: var(--text);
+  transition: background 0.12s;
+}
+.loc-filter-row:hover { background: rgba(255,255,255,0.05); }
+.loc-filter-row.loc-all { color: var(--muted); }
+.loc-filter-row.loc-all:has(input:checked) { color: var(--text); }
+.loc-filter-row input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px; height: 15px;
+  border: 1.5px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+  transition: border-color 0.15s, background 0.15s;
+}
+.loc-filter-row input[type="checkbox"]:checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.loc-filter-row input[type="checkbox"]:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px; top: 1px;
+  width: 6px; height: 9px;
+  border: 2px solid #051005;
+  border-top: none;
+  border-left: none;
+  transform: rotate(40deg);
+}
+.loc-filter-empty { font-size: 0.78rem; color: var(--muted); font-style: italic; }
 
 #live-mic-locs {
   font-size: 0.78rem;

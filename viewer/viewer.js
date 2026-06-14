@@ -28,6 +28,7 @@ const PLACEHOLDER = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
 const gallery    = {};   // entryId → entry  (keyed by species + site + location)
 let   _wxCache   = {};   // latest weather seen from any detection — fallback for cards with no wx
 const heartbeats = {};   // site_name → { site_name, timestamp, receivedAt }
+const knownLocations = new Set(); // all location_name/site_name values seen from live data
 const imgCache  = {};   // speciesKey    → object URL (or PLACEHOLDER)
 let activeAudio   = 0;
 let soundEnabled  = true;
@@ -38,7 +39,7 @@ const bufferCacheKeys = [];   // insertion order — oldest evicted when cap is 
 let mqttClient  = null;
 let db          = null;
 let probabilityThreshold = 0; // 0.0–1.0; set via &probability=N URL param
-let locationFilter = '';      // set via &location=Name URL param
+let locationFilter = new Set(); // selected location names — empty = show all
 const imageVariants = {};     // key → count of available images (from manifest.json)
 
 // ── Settings (localStorage) ──────────────────────────────────────────────────
@@ -201,8 +202,12 @@ function connect() {
       if (data.type === 'heartbeat' && data.site_name) {
         const receivedAt = data.timestamp ? new Date(data.timestamp).getTime() : Date.now();
         heartbeats[data.site_name] = { ...data, receivedAt };
+        knownLocations.add(data.site_name);
         renderHeartbeats();
       } else if (data.species_common) {
+        const _nd = _normalizeDet(data);
+        if (_nd.location_name) knownLocations.add(_nd.location_name);
+        else if (_nd.site_name) knownLocations.add(_nd.site_name);
         updateGallery(data);
       }
     } catch { /* ignore malformed */ }
@@ -279,7 +284,7 @@ function updateGallery(rawDet) {
 function getFilteredEntries() {
   return Object.values(gallery)
     .filter(e => e.bestConf >= probabilityThreshold)
-    .filter(e => !locationFilter || [e.det.site_name, e.det.location_name].some(v => (v || '').toLowerCase() === locationFilter.toLowerCase()))
+    .filter(e => locationFilter.size === 0 || [e.det.site_name, e.det.location_name].some(v => v && locationFilter.has(v)))
     .sort((a, b) => (b.lastSeenTs || 0) - (a.lastSeenTs || 0));
 }
 
@@ -841,10 +846,88 @@ document.addEventListener('click', e => {
   if (panel && panel.classList.contains('open') && !panel.contains(e.target) && e.target !== btn) {
     panel.classList.remove('open');
   }
+  const lfPanel = document.getElementById('loc-filter-panel');
+  const lfBadge = document.getElementById('live-badge');
+  if (lfPanel && lfPanel.classList.contains('open') && !lfPanel.contains(e.target) && !lfBadge.contains(e.target)) {
+    lfPanel.classList.remove('open');
+  }
 });
 
 // Refresh relative times every minute so "2 min ago" stays accurate
 setInterval(renderHeartbeats, 60000);
+
+// ── Location filter ───────────────────────────────────────────────────────────
+
+function _locFilterLabel() {
+  if (locationFilter.size === 0) return 'All locations';
+  if (locationFilter.size === 1) return [...locationFilter][0];
+  return `${locationFilter.size} locations`;
+}
+
+function _updateLocText() {
+  const el    = document.getElementById('live-loc-text');
+  const badge = document.getElementById('live-badge');
+  if (el) el.textContent = locationFilter.size === 0 ? 'Monitoring' : _locFilterLabel();
+  if (badge) badge.classList.toggle('filter-active', locationFilter.size > 0);
+}
+
+function toggleLocFilter() {
+  const panel = document.getElementById('loc-filter-panel');
+  if (!panel) return;
+  const isOpen = panel.classList.toggle('open');
+  if (isOpen) renderLocFilter();
+}
+
+function renderLocFilter() {
+  const list = document.getElementById('loc-filter-list');
+  if (!list) return;
+
+  const locs = [...knownLocations].sort((a, b) => a.localeCompare(b));
+
+  if (!locs.length) {
+    list.innerHTML = '<em class="loc-filter-empty">No locations received yet</em>';
+    return;
+  }
+
+  const allChecked = locationFilter.size === 0;
+  list.innerHTML = `
+    <label class="loc-filter-row loc-all">
+      <input type="checkbox" ${allChecked ? 'checked' : ''} onchange="toggleAllLocations(this)">
+      <span>All locations</span>
+    </label>
+    <div class="loc-filter-divider"></div>
+    ${locs.map(loc => `
+      <label class="loc-filter-row">
+        <input type="checkbox" value="${loc}" ${locationFilter.has(loc) ? 'checked' : ''} onchange="toggleOneLocation(this)">
+        <span>${loc}</span>
+      </label>`).join('')}
+  `;
+}
+
+function toggleAllLocations(cb) {
+  locationFilter.clear();
+  if (!cb.checked) {
+    // unchecking "All" does nothing useful — re-check it
+    cb.checked = true;
+    return;
+  }
+  renderLocFilter();
+  _updateLocText();
+  renderGallery();
+}
+
+function toggleOneLocation(cb) {
+  if (cb.checked) {
+    locationFilter.add(cb.value);
+  } else {
+    locationFilter.delete(cb.value);
+  }
+  // keep "All" checkbox in sync
+  const allCb = document.querySelector('#loc-filter-list .loc-all input');
+  if (allCb) allCb.checked = locationFilter.size === 0;
+  _updateLocText();
+  renderGallery();
+}
 
 async function init() {
   db = await openDb();
@@ -871,11 +954,13 @@ async function init() {
   }
 
   if (params.has('location')) {
-    locationFilter = params.get('location');
+    params.get('location').split(',').map(s => s.trim()).filter(Boolean).forEach(l => {
+      locationFilter.add(l);
+      knownLocations.add(l);
+    });
   }
 
-  const locEl = document.getElementById('live-loc-text');
-  if (locEl) locEl.textContent = locationFilter || 'Monitoring';
+  _updateLocText();
 
   const yearEl = document.getElementById('footer-year');
   if (yearEl) yearEl.textContent = new Date().getFullYear();

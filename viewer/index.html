@@ -41,9 +41,15 @@
       <span class="logo-base">BASE</span><span class="logo-viewer"> Viewer</span>
       <span id="viewer-version" style="font-size:0.65rem;color:var(--muted,#6b7280);margin-left:6px;font-family:monospace;align-self:center"></span>
     </div>
-    <div id="live-badge">
+    <div id="live-badge" onclick="toggleLocFilter()" title="Filter by location" role="button" tabindex="0">
       <span id="live-pill">LIVE</span>
       <span id="live-loc-text">Monitoring</span>
+      <svg id="loc-caret" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2 3.5l3 3 3-3"/></svg>
+    </div>
+    <!-- Location filter popover -->
+    <div id="loc-filter-panel">
+      <div class="loc-filter-header">Filter by location</div>
+      <div id="loc-filter-list"></div>
     </div>
     <div id="header-right">
       <button id="sound-unlock-btn" class="icon-btn sound-on" onclick="toggleSound()" title="Sounds on">
