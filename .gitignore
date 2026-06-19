@@ -19,3 +19,5 @@ detections.csv
 datasets/
 models/
 training/data/
+.python-version
+.ipynb_checkpoints
