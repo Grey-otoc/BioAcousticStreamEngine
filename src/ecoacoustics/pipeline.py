@@ -200,11 +200,13 @@ class Pipeline:
                 )
             # Subscribe this classifier to its capture — receives every chunk independently.
             self._clf_queues[clf.name] = self._captures[_key].subscribe(max_queue_size=max_queue_size)
+            _global_gain = self._cfg["audio"].get("gain_db", 0.0)
+            _clf_gain = self._cfg.get(clf.name, {}).get("gain_db", _global_gain)
             self._processors[clf.name] = AudioProcessor(
                 target_sample_rate=clf.sample_rate,
                 freq_min_hz=clf.freq_min_hz,
                 freq_max_hz=clf.freq_max_hz,
-                gain_db=self._cfg["audio"].get("gain_db", 0.0),
+                gain_db=_clf_gain,
             )
 
     # ------------------------------------------------------------------
