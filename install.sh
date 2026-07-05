@@ -307,17 +307,17 @@ if [ "$INSTALL_SERVICE" -eq 1 ]; then
 
     cat > "$SERVICE_FILE" <<EOF
 [Unit]
-Description=BioAcoustic Stream Engine — web UI
-After=network.target sound.target
+Description=Bioacoustic Stream Engine — web UI
+After=network.target pipewire.service pipewire-pulse.service
+Wants=pipewire.service pipewire-pulse.service
 
 [Service]
 Type=simple
 WorkingDirectory=$INSTALL_DIR
-# Short delay lets PipeWire/PulseAudio finish initialising before audio capture starts.
-ExecStartPre=/bin/sleep 5
 ExecStart=$INSTALL_DIR/.venv/bin/python -m ecoacoustics.main web --no-browser
 Restart=always
 RestartSec=10
+TimeoutStartSec=60
 
 [Install]
 WantedBy=default.target

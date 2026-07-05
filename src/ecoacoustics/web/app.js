@@ -2009,6 +2009,24 @@ window.loadAnalytics = loadAnalytics;
 async function renderSettings() {
   document.getElementById('main').innerHTML = `
     <div class="card">
+      <div class="card-title">System</div>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">
+        Control whether BASE starts automatically when this device powers on.
+        Enable this on any deployment device so recording resumes after a reboot or power cut.
+      </p>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.9rem">
+          <div class="boot-toggle" id="boot-toggle" onclick="toggleBoot()" role="switch" aria-checked="false" tabindex="0">
+            <div class="boot-toggle-knob"></div>
+          </div>
+          <span id="boot-toggle-label">Start on boot</span>
+        </label>
+        <span id="boot-status-chip" style="font-size:0.78rem;padding:3px 10px;border-radius:20px;background:var(--surface2);color:var(--muted)">Checking…</span>
+      </div>
+      <div id="boot-detail" style="margin-top:10px;font-size:0.78rem;color:var(--muted)"></div>
+    </div>
+
+    <div class="card">
       <div class="card-title">Site Name ${helpBtn('location')}</div>
       <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">
         The name of this recording site. Appears in every detection record, CSV export, and MQTT payload as <code>site_name</code>.
@@ -2197,6 +2215,9 @@ async function renderSettings() {
     const a = await api.get('/api/settings/autostart');
     document.getElementById('autostart-enabled').checked = !!a.enabled;
   } catch { /* non-fatal */ }
+
+  // Load boot status
+  _refreshBootStatus();
 
   document.getElementById('mqtt-mode').addEventListener('change', e => _mqttModeChanged(e.target.value));
   document.getElementById('btn-save-location').addEventListener('click', saveLocation);
@@ -3189,3 +3210,58 @@ window.deleteMicRow = deleteMicRow;
 window.showMicAddForm = showMicAddForm;
 window.hideMicAddForm = hideMicAddForm;
 window.confirmAddMic = confirmAddMic;
+window.toggleBoot = toggleBoot;
+
+// ── Boot-on-startup toggle ────────────────────────────────────────────────
+
+async function _refreshBootStatus() {
+  try {
+    const s = await api.get('/api/system/boot');
+    const toggle  = document.getElementById('boot-toggle');
+    const chip    = document.getElementById('boot-status-chip');
+    const detail  = document.getElementById('boot-detail');
+    if (!toggle) return;
+
+    const on = s.boot_enabled;
+    toggle.setAttribute('aria-checked', on ? 'true' : 'false');
+    toggle.classList.toggle('boot-toggle--on', on);
+
+    if (on) {
+      chip.textContent = 'Enabled';
+      chip.style.background = 'var(--success-bg, #d4edda)';
+      chip.style.color = 'var(--success, #2d7a3a)';
+      detail.textContent = 'Recording will resume automatically after reboot or power cut.';
+    } else {
+      chip.textContent = 'Disabled';
+      chip.style.background = 'var(--surface2)';
+      chip.style.color = 'var(--muted)';
+      detail.textContent = s.service_installed
+        ? 'Service installed but not enabled — recording will not start on boot.'
+        : 'Service not installed on this device. Enable below to set up boot-start.';
+    }
+  } catch { /* non-fatal — may not be available on non-Linux */ }
+}
+
+async function toggleBoot() {
+  const toggle = document.getElementById('boot-toggle');
+  if (!toggle) return;
+  const currentlyOn = toggle.getAttribute('aria-checked') === 'true';
+  const enable = !currentlyOn;
+
+  toggle.style.opacity = '0.5';
+  toggle.style.pointerEvents = 'none';
+  try {
+    const r = await api.post('/api/system/boot', { enabled: enable });
+    if (!r.ok && r.errors?.length) {
+      toast('Boot setup error: ' + r.errors.join('; '), 'error', 6000);
+    } else {
+      toast(enable ? 'Boot-start enabled — will auto-resume after reboot' : 'Boot-start disabled', enable ? 'success' : 'warn', 4000);
+    }
+    await _refreshBootStatus();
+  } catch (err) {
+    toast(err.message, 'error', 5000);
+  } finally {
+    toggle.style.opacity = '';
+    toggle.style.pointerEvents = '';
+  }
+}
