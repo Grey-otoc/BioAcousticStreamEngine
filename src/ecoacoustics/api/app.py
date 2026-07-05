@@ -72,6 +72,11 @@ def get_or_create_pipeline(device_key: str, device_index=None, device_name: str 
             config_override=config_override,
             mic_name=mic_name,
         )
+    elif config_override is not None:
+        # Refresh config on the existing manager so stop+restart picks up the
+        # latest device/classifier assignments from the UI without needing a
+        # full server restart.
+        state.pipeline_instances[device_key]._config_override = config_override
     return state.pipeline_instances[device_key]
 
 

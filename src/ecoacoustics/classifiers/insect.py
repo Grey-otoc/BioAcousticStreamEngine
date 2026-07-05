@@ -90,8 +90,14 @@ class InsectClassifier(BaseClassifier):
         self._freq_min_hz: int = config.get("freq_min_hz", 4500)
         self._freq_max_hz: int = config.get("freq_max_hz", 20000)
         self._report_cooldown_secs: float = config.get("report_cooldown_secs", 60.0)
+        # Require a species to score above min_confidence in this many consecutive
+        # 3-second chunks before it is reported. Filters sporadic false positives
+        # caused by ambient noise — real stridulation is sustained, not one-shot.
+        self._confirm_chunks: int = max(1, int(config.get("confirm_chunks", 2)))
         self._model = None
         self._classes: list[str] = []
+        # Per-species consecutive-hit counter (reset when a species misses a chunk)
+        self._hit_count: dict[str, int] = {}
 
     @property
     def sample_rate(self) -> int:
@@ -192,25 +198,40 @@ class InsectClassifier(BaseClassifier):
 
             # scores_df: index=clip paths, columns=species names, values=scores
             if scores_df is None or scores_df.empty:
+                # Nothing scored — reset all hit counters
+                self._hit_count.clear()
                 return []
 
             row = scores_df.iloc[0]
+            candidates: list[Detection] = []
+            triggered_labels: set[str] = set()
+
             for species, score in row.items():
                 if float(score) >= self._min_confidence:
                     common = _COMMON_NAMES.get(str(species), str(species))
-                    detections.append(Detection(
-                        label=common,
-                        confidence=round(float(score), 4),
-                        classifier=self.name,
-                        timestamp=chunk.timestamp,
-                        metadata={
-                            "scientific_name": str(species),
-                            "model": str(Path(self._model_path).name),
-                            "group": _orthoptera_group(str(species)),
-                        },
-                    ))
+                    triggered_labels.add(common)
+                    self._hit_count[common] = self._hit_count.get(common, 0) + 1
+                    if self._hit_count[common] >= self._confirm_chunks:
+                        # Confirmed — reset so next detection needs confirmation again
+                        self._hit_count[common] = 0
+                        candidates.append(Detection(
+                            label=common,
+                            confidence=round(float(score), 4),
+                            classifier=self.name,
+                            timestamp=chunk.timestamp,
+                            metadata={
+                                "scientific_name": str(species),
+                                "model": str(Path(self._model_path).name),
+                                "group": _orthoptera_group(str(species)),
+                            },
+                        ))
 
-            return sorted(detections, key=lambda d: -d.confidence)
+            # Reset counters for species that missed this chunk
+            for label in list(self._hit_count.keys()):
+                if label not in triggered_labels:
+                    self._hit_count.pop(label)
+
+            return sorted(candidates, key=lambda d: -d.confidence)
 
         except Exception as exc:
             _log.warning("InsectClassifier.classify error: %s", exc)
