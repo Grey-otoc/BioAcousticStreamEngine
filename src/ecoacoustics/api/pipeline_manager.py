@@ -143,6 +143,47 @@ class PipelineManager:
         t.start()
         return t
 
+    def _start_mic_config_watcher(self, pipeline, mic_name: str,
+                                  clf_snap: list, device_snap) -> threading.Thread:
+        """Background thread: stop pipeline if this mic's classifier/device config changes.
+
+        Fires every 20 s. When the named mic's classifiers or device entry in the mics[]
+        section changes, updates self._config_override so the restart loop picks up the
+        new settings, then stops the running pipeline.
+        """
+        def _watch():
+            while not pipeline._stop_event.wait(20):
+                try:
+                    with open(self._config_path) as f:
+                        new_cfg = yaml.safe_load(f)
+                    mics = new_cfg.get("mics") or []
+                    mic = next((m for m in mics if m.get("name") == mic_name), None)
+                    if mic is None:
+                        continue
+                    new_clfs = sorted(mic.get("classifiers") or [])
+                    new_device = mic.get("device")
+                    if new_clfs != sorted(clf_snap) or new_device != device_snap:
+                        _log.info(
+                            "Mic config changed for '%s' (%s → %s) — restarting pipeline",
+                            mic_name, clf_snap, new_clfs,
+                        )
+                        clf_list = mic.get("classifiers") or []
+                        self._config_override = {
+                            "classifiers": {
+                                "active": clf_list,
+                                "devices": {clf: new_device for clf in clf_list},
+                            },
+                            "mics": [mic],
+                        }
+                        pipeline._stop_event.set()
+                        return
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_watch, daemon=True)
+        t.start()
+        return t
+
     def _run_wake(self, duration_seconds: Optional[float]) -> None:
         from ecoacoustics.pipeline import Pipeline
         _start_time = time.time()
@@ -162,7 +203,11 @@ class PipelineManager:
                     config_override=self._config_override or None,
                     mic_name=self._mic_name,
                 )
-                if not self._config_override:
+                if self._config_override and self._mic_name:
+                    _clfs = list(self._config_override.get("classifiers", {}).get("active") or [])
+                    _dev = next(iter((self._config_override.get("classifiers", {}).get("devices") or {}).values()), None)
+                    self._start_mic_config_watcher(self._pipeline, self._mic_name, _clfs, _dev)
+                else:
                     self._start_config_watcher(self._pipeline, cfg)
                 try:
                     self._pipeline.run(window_name="manual", duration_seconds=remaining)
@@ -214,7 +259,11 @@ class PipelineManager:
                             config_override=self._config_override or None,
                             mic_name=self._mic_name,
                         )
-                        if not self._config_override:
+                        if self._config_override and self._mic_name:
+                            _clfs = list(self._config_override.get("classifiers", {}).get("active") or [])
+                            _dev = next(iter((self._config_override.get("classifiers", {}).get("devices") or {}).values()), None)
+                            self._start_mic_config_watcher(self._pipeline, self._mic_name, _clfs, _dev)
+                        else:
                             self._start_config_watcher(self._pipeline, cfg)
                         try:
                             session = self._pipeline.run(

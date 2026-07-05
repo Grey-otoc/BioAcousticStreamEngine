@@ -1173,6 +1173,7 @@ async function _saveMicConfig(idx) {
     .map(el => el.dataset.clf);
   try {
     await api.patch(`/api/settings/mics/${idx}`, { device: device || null, classifiers, schedule });
+    _populateSpecDevices();
   } catch (err) {
     toast(err.message, 'error', 4000);
   }
