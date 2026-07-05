@@ -80,8 +80,14 @@ def get_or_create_pipeline(device_key: str, device_index=None, device_name: str 
     return state.pipeline_instances[device_key]
 
 
-async def _delayed_autostart(mgr, delay_secs: int = 8) -> None:
-    """Resume recording after boot. Delays to let audio drivers finish initialising."""
+async def _delayed_autostart(mgr, delay_secs: int = 20) -> None:
+    """Resume recording after boot.
+
+    Waits for audio drivers and USB devices to finish initialising, then
+    re-launches whichever monitoring locations were running when the system
+    last shut down.  Retries up to 3 times if devices aren't ready yet —
+    USB AudioMoths can take 30+ seconds to enumerate after a cold boot.
+    """
     await asyncio.sleep(delay_secs)
     if not _AUTOSTART.exists():
         return
@@ -90,18 +96,38 @@ async def _delayed_autostart(mgr, delay_secs: int = 8) -> None:
             a_cfg = yaml.safe_load(f) or {}
         if not a_cfg.get("enabled", False):
             return
-        with open(CONFIG_PATH) as f:
-            settings = yaml.safe_load(f) or {}
-        mics_with_clfs = [m for m in (settings.get("mics") or []) if m.get("classifiers")]
-        if mics_with_clfs:
-            from ecoacoustics.api.routes.status import start_mics
-            _log.info("Autostart: resuming %d configured monitoring locations", len(mics_with_clfs))
-            start_mics()
-        else:
-            _log.info("Autostart: resuming default schedule recording")
-            mgr.start_schedule()
     except Exception as exc:
-        _log.warning("Autostart failed: %s", exc)
+        _log.warning("Autostart: could not read autostart.yaml: %s", exc)
+        return
+
+    from ecoacoustics.api.routes.status import start_mics
+
+    for attempt in range(1, 4):
+        try:
+            with open(CONFIG_PATH) as f:
+                settings = yaml.safe_load(f) or {}
+            mics_with_clfs = [m for m in (settings.get("mics") or []) if m.get("classifiers")]
+            if mics_with_clfs:
+                _log.info("Autostart (attempt %d): resuming %d monitoring location(s)",
+                          attempt, len(mics_with_clfs))
+                result = start_mics()
+                if result.get("started"):
+                    _log.info("Autostart: started %s", result["started"])
+                    return
+                if result.get("already_running"):
+                    return
+                _log.warning("Autostart (attempt %d): no locations started — skipped=%s",
+                             attempt, result.get("skipped"))
+            else:
+                _log.info("Autostart (attempt %d): resuming default schedule recording", attempt)
+                if mgr.start_schedule():
+                    return
+        except Exception as exc:
+            _log.warning("Autostart (attempt %d) failed: %s", attempt, exc)
+
+        if attempt < 3:
+            _log.info("Autostart: retrying in 15 s (USB devices may still be initialising)")
+            await asyncio.sleep(15)
 
 
 @asynccontextmanager
