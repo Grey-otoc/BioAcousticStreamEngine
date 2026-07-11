@@ -206,7 +206,7 @@ A browser tab opens automatically at `http://localhost:8000`. A desktop launcher
 |---|---|
 | **Dashboard** | Live detection feed, real-time VU meter, per-microphone device assignment, classifier selection (🐦🦇🐝🦗🌱💧), and schedule mode (auto/manual); start/stop per mic; today's species count and call totals; live spectrogram with location dropdown and headphone monitoring |
 | **Gallery** | Live photo grid populated as species are detected; confidence threshold filter; detection counts; CC attribution overlays; upload your own images per species |
-| **Schedule** | Today's listening windows, add/remove custom windows |
+| **Schedule** | Today's listening windows with editable offset and duration; add/remove custom windows |
 | **Clips** | Browse saved audio clips by species and classifier, play in browser, delete clips |
 | **Reports** | Date and species filtering, daily summary table, download detections/sessions as CSV, clear all logs |
 | **Analytics** | Date-range and multi-select filters (locations, classifiers, confidence); activity-over-time chart with Open-Meteo weather overlay; species trend cards vs previous period; Leaflet map of monitoring locations |
@@ -328,27 +328,55 @@ The kiosk browser opens with popups, address bar, and desktop decorations hidden
 
 ---
 
+## Zero-touch Deployment
+
+For field deployments, kiosk screens, and remote monitoring devices, BASE can be configured to power on and begin recording automatically without anyone touching a keyboard. Three things must all be true:
+
+| # | What | How | Status check |
+|---|---|---|---|
+| 1 | **Web server starts on boot** | systemd user service + loginctl linger | `systemctl --user is-active bioacoustic-stream-engine` → `active` |
+| 2 | **Recording resumes on boot** | `config/autostart.yaml: enabled: true` | Settings → System → Start on Boot |
+| 3 | **Previous mic settings are remembered** | Saved to `config/settings.yaml` | Monitoring locations persist across reboots automatically |
+
+`install.sh` configures all three interactively. On an existing install, the **Settings → System** page has a **Start on Boot** toggle that covers items 1 and 2. Item 3 is automatic — settings are always saved to disk.
+
+### Quick setup (new device)
+
+```bash
+git clone https://github.com/blenheiminnovation/BioAcousticStreamEngine.git
+cd BioAcousticStreamEngine
+bash install.sh
+# When prompted "Auto-resume recording after reboot?" answer Y
+```
+
+Then open the web UI, add your monitoring locations, assign microphones, and press **Start All**. Those settings are remembered — on the next reboot BASE starts recording from exactly the same configuration.
+
+For fully unattended kiosk devices (no login prompt at all), the installer also offers to configure OS auto-login so the display boots straight to the kiosk browser without a password.
+
+### Unattended / scripted setup
+
+```bash
+bash install.sh --auto-resume          # enable recording auto-resume without prompting
+bash install.sh --auto-login           # also configure OS auto-login (display devices)
+bash install.sh --auto-resume --auto-login  # both
+```
+
+### Verify end-to-end
+
+After rebooting:
+
+```bash
+systemctl --user is-active bioacoustic-stream-engine   # → active (web server running)
+curl -s http://localhost:8000/api/status | python3 -m json.tool  # → pipelines running
+```
+
+---
+
 ## Running 24/7 (Continuous Monitoring)
 
-BASE is designed to run unattended around the clock. Follow these steps to keep it running reliably.
+BASE is designed to run unattended around the clock. The [Zero-touch Deployment](#zero-touch-deployment) section above covers automatic boot-to-recording. The steps below cover keeping the underlying OS stable over long deployments.
 
-### 1. Enable autostart (already configured)
-
-The web UI and pipeline autostart on login via a systemd user service. Verify it is enabled:
-
-```bash
-systemctl --user status bioacoustic-stream-engine
-```
-
-### 2. Enable linger — keep the service alive when logged out
-
-By default, user services stop when you log out of the desktop. Enable linger so BASE keeps running regardless:
-
-```bash
-loginctl enable-linger $USER
-```
-
-### 3. Prevent the system from sleeping
+### 1. Prevent the system from sleeping
 
 ```bash
 # Stop the OS from suspending automatically
@@ -359,7 +387,7 @@ gsettings set org.gnome.settings-daemon.plugins.power sleep-inactive-ac-timeout 
 gsettings set org.gnome.desktop.session idle-delay 0
 ```
 
-### 4. Prevent lid close from suspending (laptops)
+### 2. Prevent lid close from suspending (laptops)
 
 ```bash
 sudo sed -i 's/#HandleLidSwitch=suspend/HandleLidSwitch=ignore/' /etc/systemd/logind.conf
@@ -367,17 +395,37 @@ sudo sed -i 's/#HandleLidSwitchExternalPower=suspend/HandleLidSwitchExternalPowe
 sudo systemctl restart systemd-logind
 ```
 
-### 5. Keep it plugged in
+### 3. Keep it plugged in
 
 Battery depletion will stop recording. If running on a laptop, connect AC power and set the power button action to **Do Nothing** in system settings.
 
-### Verify end-to-end
+### What happens after a power cut
 
-After applying the above, reboot and confirm BASE is running without logging in:
+1. Device restarts → systemd starts BASE automatically (linger + user service)
+2. BASE reads `config/autostart.yaml` — if `enabled: true`, it waits 20 seconds for USB devices to enumerate
+3. BASE reads `config/settings.yaml` and restarts all monitoring locations that had classifiers assigned
+4. Recording resumes from the same mic/classifier configuration as before the outage
+
+No human intervention needed. The 20-second delay accommodates USB AudioMoths that can take up to 30 seconds to appear after a cold boot; BASE retries up to 3 times if a device isn't ready yet.
+
+---
+
+## Updating BASE
+
+After pulling a new version from git, run the update script to install any new dependencies and restart the service:
 
 ```bash
-systemctl --user is-active bioacoustic-stream-engine   # should print: active
+git pull
+bash update.sh
 ```
+
+`update.sh` will:
+1. Pull the latest code (if you haven't already)
+2. Update Python packages (`pip install -e .`)
+3. Restart the systemd service (if running)
+4. Check that auto-start-on-boot is configured and prompt to fix it if not
+
+Your `config/settings.yaml`, `config/secrets.yaml`, and all output data are never touched by the update — they are gitignored and persist across updates.
 
 ---
 

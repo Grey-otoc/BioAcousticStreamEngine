@@ -32,6 +32,9 @@ INSTALL_SYSTEM_PACKAGES=1
 INSTALL_SERVICE=1
 INSTALL_DESKTOP=1
 PYTHON_CMD=""
+# -1 = prompt interactively, 0 = skip, 1 = enable without prompting
+AUTO_RESUME=-1
+AUTO_LOGIN=-1
 
 usage() {
 cat <<'EOF'
@@ -42,6 +45,10 @@ Options:
   --no-system-packages  Skip apt package installation
   --no-service          Skip systemd user service/autostart setup
   --no-desktop          Skip desktop launcher setup
+  --auto-resume         Enable recording auto-resume on boot without prompting
+  --no-auto-resume      Skip recording auto-resume setup
+  --auto-login          Configure OS auto-login without prompting (kiosk/field devices)
+  --no-auto-login       Skip OS auto-login setup
   -h, --help            Show this help
 EOF
 }
@@ -63,6 +70,22 @@ while [ "$#" -gt 0 ]; do
       ;;
     --no-desktop)
       INSTALL_DESKTOP=0
+      shift
+      ;;
+    --auto-resume)
+      AUTO_RESUME=1
+      shift
+      ;;
+    --no-auto-resume)
+      AUTO_RESUME=0
+      shift
+      ;;
+    --auto-login)
+      AUTO_LOGIN=1
+      shift
+      ;;
+    --no-auto-login)
+      AUTO_LOGIN=0
       shift
       ;;
     -h|--help)
@@ -289,7 +312,7 @@ fi
 
 if [ ! -f "config/autostart.yaml" ]; then
   echo "enabled: false" > config/autostart.yaml
-  ok "Created config/autostart.yaml (recording will resume on boot once you press Start)"
+  ok "Created config/autostart.yaml"
 else
   ok "config/autostart.yaml exists"
 fi
@@ -338,6 +361,24 @@ EOF
       ok "Boot autostart enabled (loginctl linger)"
     else
       warn "Could not enable linger — BASE will start on login but not at unattended boot"
+    fi
+
+    # Prompt: auto-resume recording after reboot
+    echo ""
+    _do_auto_resume=0
+    if [ "$AUTO_RESUME" -eq 1 ]; then
+      _do_auto_resume=1
+    elif [ "$AUTO_RESUME" -eq 0 ]; then
+      _do_auto_resume=0
+    elif [ -t 0 ]; then
+      read -r -p "  Auto-resume recording after reboot / power cut? [Y/n] " _ans
+      [[ "${_ans,,}" != "n" ]] && _do_auto_resume=1
+    fi
+    if [ "$_do_auto_resume" -eq 1 ]; then
+      echo "enabled: true" > config/autostart.yaml
+      ok "Recording will resume automatically on reboot (config/autostart.yaml)"
+    else
+      ok "Auto-resume left disabled — enable later in Settings → System or re-run install.sh --auto-resume"
     fi
   fi
 else
@@ -428,6 +469,67 @@ EOF
   ok "Kiosk shortcut on Desktop + autostart on login enabled"
 fi
 
+# ── 9. OS auto-login (optional, for kiosk/field devices) ──────────────────────
+# Configures the display manager to log in automatically so the kiosk browser
+# opens on boot without anyone typing a password.  Only offered when a
+# display manager is detected.
+
+_DM=""
+[ -f "/etc/gdm3/custom.conf" ]    && _DM="gdm3"
+[ -f "/etc/lightdm/lightdm.conf" ] && _DM="lightdm"
+[ -d "/etc/lightdm/lightdm.conf.d" ] && _DM="lightdm"
+
+if [ -n "$_DM" ]; then
+  _do_autologin=0
+  if [ "$AUTO_LOGIN" -eq 1 ]; then
+    _do_autologin=1
+  elif [ "$AUTO_LOGIN" -eq 0 ]; then
+    _do_autologin=0
+  elif [ -t 0 ]; then
+    echo ""
+    info "OS auto-login lets this device boot straight to desktop without a password"
+    info "prompt — recommended for unattended kiosk or field deployments."
+    info "(Skip this on shared or security-sensitive machines.)"
+    read -r -p "  Configure OS auto-login for user '$USER'? [y/N] " _ans
+    [[ "${_ans,,}" == "y" ]] && _do_autologin=1
+  fi
+
+  if [ "$_do_autologin" -eq 1 ]; then
+    step "Configuring OS auto-login"
+    if [ "$_DM" = "gdm3" ]; then
+      # GDM3 (Ubuntu/GNOME) — edit [daemon] section of /etc/gdm3/custom.conf
+      CONF="/etc/gdm3/custom.conf"
+      if grep -q "AutomaticLoginEnable" "$CONF"; then
+        sudo sed -i "s/^#*AutomaticLoginEnable.*/AutomaticLoginEnable=True/" "$CONF"
+        sudo sed -i "s/^#*AutomaticLogin=.*/AutomaticLogin=$USER/" "$CONF"
+      else
+        sudo sed -i "/^\[daemon\]/a AutomaticLoginEnable=True\nAutomaticLogin=$USER" "$CONF"
+      fi
+      ok "GDM3 auto-login configured for $USER"
+    elif [ "$_DM" = "lightdm" ]; then
+      # LightDM (Raspberry Pi OS / Ubuntu alternatives)
+      CONF="/etc/lightdm/lightdm.conf"
+      if [ ! -f "$CONF" ]; then
+        # May be split into conf.d — create a drop-in
+        CONF="/etc/lightdm/lightdm.conf.d/50-autologin.conf"
+        sudo mkdir -p "$(dirname "$CONF")"
+        echo -e "[SeatDefaults]\nautologin-user=$USER\nautologin-user-timeout=0" | sudo tee "$CONF" > /dev/null
+      else
+        if grep -q "^autologin-user" "$CONF"; then
+          sudo sed -i "s/^autologin-user=.*/autologin-user=$USER/" "$CONF"
+        elif grep -q "^#autologin-user" "$CONF"; then
+          sudo sed -i "s/^#autologin-user=.*/autologin-user=$USER/" "$CONF"
+        else
+          sudo sed -i "/^\[SeatDefaults\]/a autologin-user=$USER\nautologin-user-timeout=0" "$CONF"
+        fi
+        sudo sed -i "s/^#*autologin-user-timeout=.*/autologin-user-timeout=0/" "$CONF"
+      fi
+      ok "LightDM auto-login configured for $USER"
+    fi
+    info "Changes take effect on next reboot."
+  fi
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -435,7 +537,18 @@ echo -e "${GREEN}${BOLD}  BASE installed successfully!${NC}"
 echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 if [ "$INSTALL_SERVICE" -eq 1 ]; then
-  echo "  The web UI is started now and will restart automatically on boot and after login."
+  # Summarise what was configured for boot
+  _resume_status="disabled (enable in Settings → System or re-run with --auto-resume)"
+  [ -f "config/autostart.yaml" ] && grep -q "enabled: true" "config/autostart.yaml" && \
+    _resume_status="enabled — recording resumes automatically"
+  _linger_status="not configured"
+  command -v loginctl &>/dev/null && \
+    loginctl show-user "$USER" --property=Linger 2>/dev/null | grep -q "Linger=yes" && \
+    _linger_status="enabled"
+
+  echo "  Web UI:        started and will restart automatically on boot"
+  echo "  Boot linger:   $_linger_status"
+  echo "  Auto-resume:   $_resume_status"
   echo ""
   echo "  Check status:  systemctl --user status bioacoustic-stream-engine"
 else
@@ -450,16 +563,20 @@ echo ""
 echo "  First-time setup:"
 echo "    1. Open the dashboard and go to Settings"
 echo "    2. Set your recording location (name, lat/lon)"
-echo "    3. Assign microphones to classifiers under Schedule → Classifiers"
+echo "    3. Assign microphones to monitoring locations (Settings → Monitoring Locations)"
 echo "    4. Configure MQTT in Settings if publishing to a broker"
+echo "    5. Press Start All on the dashboard — settings are remembered on reboot"
+echo ""
+echo "  To update BASE in future:"
+echo "    bash update.sh"
 echo ""
 echo "  config/settings.yaml — all configuration (safe to commit)"
 echo "  config/secrets.yaml  — MQTT credentials (gitignored, never committed)"
-echo ""
-echo "  List microphones:  .venv/bin/python -m ecoacoustics.main list-devices"
 echo ""
 echo "  Troubleshooting:"
 echo "    bash install.sh --python python3.12   # force a specific Python"
 echo "    bash install.sh --no-service          # skip autostart if systemd fails"
 echo "    bash install.sh --no-system-packages  # skip apt (needs manual deps)"
+echo "    bash install.sh --auto-resume         # enable auto-resume without prompting"
+echo "    bash install.sh --auto-login          # configure OS auto-login without prompting"
 echo ""
