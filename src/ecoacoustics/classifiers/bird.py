@@ -55,9 +55,10 @@ class BirdClassifier(BaseClassifier):
         self._longitude: float | None = config.get("longitude")
         # Chunks with RMS below this are treated as silence — BirdNET skipped entirely
         self._silence_threshold: float = config.get("silence_threshold", 0.001)
-        # Species to suppress — BirdNET non-bird classes (Human vocal, Engine, etc.)
-        # Default excludes "Human vocal" which BirdNET reports for speech near the mic.
-        default_excludes = ["Human vocal"]
+        # Suppress BirdNET's non-bird noise classes — these are legitimate model outputs
+        # but are not species detections. Set exclude_species: [] in settings.yaml to
+        # see them, or add extra entries to suppress additional classes.
+        default_excludes = ["Human vocal", "Engine", "Wind", "Rain", "Noise"]
         self._exclude: set[str] = set(config.get("exclude_species", default_excludes))
         self._analyzer = None
         self._Recording = None
