@@ -464,6 +464,7 @@ Comment=Open BASE in full-screen kiosk mode on login
 Exec=$INSTALL_DIR/start_kiosk.sh
 Terminal=false
 X-GNOME-Autostart-enabled=true
+X-GNOME-Autostart-delay=5
 EOF
 
   ok "Kiosk shortcut on Desktop + autostart on login enabled"
