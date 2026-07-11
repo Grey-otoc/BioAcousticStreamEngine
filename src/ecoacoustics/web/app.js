@@ -29,7 +29,10 @@ const api = {
       const r = await fetch(path, opts);
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
-        throw new Error(body.detail || `Server error (${r.status})`);
+        const detail = Array.isArray(body.detail)
+          ? body.detail.map(e => e.msg || JSON.stringify(e)).join('; ')
+          : body.detail || `Server error (${r.status})`;
+        throw new Error(detail);
       }
       return r.json();
     } catch (e) {
@@ -1071,6 +1074,10 @@ async function loadMicClfPanel() {
     const deviceOpts = devData.devices.map(d =>
       `<option value="${escHtml(d.name)}">${escHtml(d.label || d.name)}${d.is_default ? ' ★' : ''}</option>`
     ).join('');
+    // Build a lookup of device sample_rate by name so we can warn when a
+    // standard-rate mic is assigned to bat (needs ≥192 kHz for ultrasonic)
+    const deviceRateMap = {};
+    for (const d of devData.devices) deviceRateMap[d.name] = d.sample_rate || 0;
 
     const deviceBanner = deviceNote
       ? `<p style="font-size:0.78rem;color:var(--warning);margin:0 0 12px;padding:8px 10px;background:rgba(210,153,34,0.10);border-radius:var(--radius)">
@@ -1115,6 +1122,14 @@ async function loadMicClfPanel() {
         ? `<button class="btn btn-sm btn-danger" onclick="_stopMic('${escHtml(micKey)}',this)">■ Stop</button>`
         : `<button class="btn btn-sm btn-primary" data-mic-name="${escHtml(mic.name)}" onclick="_startMic(this)">▶ Start</button>`;
 
+      // Warn if bat is selected but the assigned device is a standard-rate mic
+      const deviceRate = deviceRateMap[mic.device] || 0;
+      const batWarning = activeClfs.includes('bat') && mic.device && deviceRate > 0 && deviceRate <= 48000
+        ? `<div style="width:100%;font-size:0.75rem;color:var(--danger);padding:5px 8px;background:rgba(220,50,50,0.08);border-radius:var(--radius);margin-top:2px">
+             ⚠ Bat detection needs an ultrasonic mic (≥192 kHz). This device captures ${Math.round(deviceRate/1000)} kHz — bat calls will not be detected and false positives are likely. Assign the AudioMoth instead.
+           </div>`
+        : '';
+
       return `
         <div class="device-row" id="mic-row-${idx}" style="flex-wrap:wrap;gap:10px;margin-bottom:8px;${isRunning ? 'border-color:var(--primary)' : ''}">
           <div class="device-info" style="min-width:120px">
@@ -1124,6 +1139,7 @@ async function loadMicClfPanel() {
           <div style="display:flex;flex-direction:column;gap:6px;flex:1;min-width:180px">
             <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Microphone</div>
             ${deviceSel}
+            ${batWarning}
           </div>
           <div style="display:flex;flex-direction:column;gap:6px">
             <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Detect</div>
