@@ -1250,16 +1250,57 @@ async function loadSchedule() {
     el.innerHTML = `
       <table>
         <thead><tr><th>Window</th><th>Start</th><th>End</th><th>Duration</th><th>Status</th><th></th></tr></thead>
-        <tbody>${data.windows.map(w => `
-          <tr class="${w.active ? 'active-row' : ''}">
-            <td>${w.name}</td><td class="window-time">${w.start}</td>
+        <tbody>${data.windows.map(w => {
+          const actionBtn = w.editable
+            ? `<button class="btn btn-sm btn-danger" onclick="deleteWindow('${escHtml(w.name)}')">Remove</button>`
+            : `<button class="btn btn-sm btn-outline" onclick="_editWindow(this,'${escHtml(w.name)}',${w.offset_mins},${w.duration_mins},'${escHtml(w.anchor)}')">Edit</button>`;
+          return `<tr class="${w.active ? 'active-row' : ''}" id="sched-row-${escHtml(w.name)}">
+            <td>${escHtml(w.name)}</td><td class="window-time">${w.start}</td>
             <td class="window-time">${w.end}</td><td>${w.duration_mins} min</td>
             <td>${w.active ? '<span class="badge-active">● ACTIVE</span>' : ''}</td>
-            <td>${w.editable ? `<button class="btn btn-sm btn-danger" onclick="deleteWindow('${w.name}')">Remove</button>` : ''}</td>
-          </tr>`).join('')}
+            <td>${actionBtn}</td>
+          </tr>`;
+        }).join('')}
         </tbody>
       </table>`;
   } catch (err) { el.innerHTML = `<div class="empty" style="color:var(--danger)">${err.message}</div>`; }
+}
+
+function _editWindow(btn, name, offsetMins, durationMins, anchor) {
+  const row = document.getElementById(`sched-row-${name}`);
+  if (!row) return;
+  const anchorLabels = { sunrise: 'Sunrise', sunset: 'Sunset', noon: 'Noon', fixed: 'Fixed' };
+  row.insertAdjacentHTML('afterend', `
+    <tr id="sched-edit-${name}" style="background:var(--surface2)">
+      <td colspan="6" style="padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="font-size:0.8rem;color:var(--muted)">Anchor: <strong>${escHtml(anchorLabels[anchor] || anchor)}</strong></span>
+          <label style="font-size:0.82rem;display:flex;align-items:center;gap:6px">
+            Offset (min)
+            <input type="number" id="edit-offset-${name}" value="${offsetMins}" style="width:80px;padding:3px 6px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          </label>
+          <label style="font-size:0.82rem;display:flex;align-items:center;gap:6px">
+            Duration (min)
+            <input type="number" id="edit-dur-${name}" value="${durationMins}" style="width:80px;padding:3px 6px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          </label>
+          <button class="btn btn-sm btn-primary" onclick="_saveWindow('${escHtml(name)}')">Save</button>
+          <button class="btn btn-sm btn-outline" onclick="document.getElementById('sched-edit-${escHtml(name)}').remove()">Cancel</button>
+        </div>
+        <div style="font-size:0.73rem;color:var(--muted);margin-top:6px">Offset is relative to ${escHtml(anchorLabels[anchor] || anchor).toLowerCase()} — negative = before, positive = after.</div>
+      </td>
+    </tr>`);
+  btn.disabled = true;
+}
+
+async function _saveWindow(name) {
+  const offset_mins = parseInt(document.getElementById(`edit-offset-${name}`)?.value) || 0;
+  const duration_mins = parseInt(document.getElementById(`edit-dur-${name}`)?.value);
+  if (!duration_mins || duration_mins < 1) { toast('Duration must be at least 1 minute', 'warn'); return; }
+  try {
+    await api.patch(`/api/schedule/windows/${encodeURIComponent(name)}`, { offset_mins, duration_mins });
+    toast(`'${name}' updated`, 'success');
+    await loadSchedule();
+  } catch (err) { toast(err.message, 'error', 6000); }
 }
 
 async function addWindow() {

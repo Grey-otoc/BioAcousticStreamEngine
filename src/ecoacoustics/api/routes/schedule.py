@@ -43,8 +43,12 @@ def get_schedule():
     scheduler = Scheduler.from_config(cfg)
     current = scheduler.current_window()
 
+    # Build a lookup of raw config so the UI can pre-fill edit fields
+    raw_windows = {w["name"]: w for w in cfg.get("schedule", {}).get("windows", [])}
+
     windows = []
     for start, end, name in scheduler.window_times():
+        raw = raw_windows.get(name, {})
         windows.append({
             "name": name,
             "start": start.strftime("%H:%M"),
@@ -52,6 +56,8 @@ def get_schedule():
             "duration_mins": int((end - start).total_seconds() / 60),
             "active": current is not None and current[2] == name,
             "editable": False,
+            "anchor": raw.get("anchor", "sunrise"),
+            "offset_mins": raw.get("offset_mins", 0),
         })
 
     for w in _load_ui_windows():
@@ -61,6 +67,30 @@ def get_schedule():
         "windows": windows,
         "timezone": cfg.get("schedule", {}).get("timezone", "UTC"),
     }
+
+
+@router.patch("/schedule/windows/{name}")
+def update_window(name: str, body: dict):
+    """Update offset_mins and/or duration_mins on a YAML-defined schedule window."""
+    with open(_SETTINGS) as f:
+        cfg = yaml.safe_load(f)
+
+    sched = cfg.setdefault("schedule", {})
+    windows = sched.get("windows", [])
+    target = next((w for w in windows if w.get("name") == name), None)
+    if target is None:
+        raise HTTPException(404, f"Window '{name}' not found in settings.yaml")
+
+    if "offset_mins" in body:
+        target["offset_mins"] = int(body["offset_mins"])
+    if "duration_mins" in body:
+        target["duration_mins"] = int(body["duration_mins"])
+
+    sched["windows"] = windows
+    with open(_SETTINGS, "w") as f:
+        yaml.dump(cfg, f, default_flow_style=False, allow_unicode=True)
+
+    return {"updated": name, "window": target}
 
 
 @router.post("/schedule/windows")
