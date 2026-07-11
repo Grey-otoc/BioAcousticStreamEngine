@@ -497,14 +497,23 @@ if [ -n "$_DM" ]; then
   if [ "$_do_autologin" -eq 1 ]; then
     step "Configuring OS auto-login"
     if [ "$_DM" = "gdm3" ]; then
-      # GDM3 (Ubuntu/GNOME) — edit [daemon] section of /etc/gdm3/custom.conf
+      # GDM3 (Ubuntu/GNOME) — use Python for reliable INI editing; the default
+      # Ubuntu gdm3 config has commented lines like "#  AutomaticLoginEnable = true"
+      # (with spaces after #) that plain sed patterns miss.
       CONF="/etc/gdm3/custom.conf"
-      if grep -q "AutomaticLoginEnable" "$CONF"; then
-        sudo sed -i "s/^#*AutomaticLoginEnable.*/AutomaticLoginEnable=True/" "$CONF"
-        sudo sed -i "s/^#*AutomaticLogin=.*/AutomaticLogin=$USER/" "$CONF"
-      else
-        sudo sed -i "/^\[daemon\]/a AutomaticLoginEnable=True\nAutomaticLogin=$USER" "$CONF"
-      fi
+      sudo python3 - "$CONF" "$USER" <<'PYEOF'
+import re, sys
+path, user = sys.argv[1], sys.argv[2]
+with open(path) as f:
+    content = f.read()
+# Remove any existing (commented or uncommented) AutomaticLogin lines
+content = re.sub(r'[ \t]*#?[ \t]*AutomaticLoginEnable[ \t]*=.*\n', '', content)
+content = re.sub(r'[ \t]*#?[ \t]*AutomaticLogin[ \t]*=.*\n', '', content)
+# Inject clean lines immediately after [daemon]
+content = re.sub(r'\[daemon\]', f'[daemon]\nAutomaticLoginEnable=True\nAutomaticLogin={user}', content)
+with open(path, 'w') as f:
+    f.write(content)
+PYEOF
       ok "GDM3 auto-login configured for $USER"
     elif [ "$_DM" = "lightdm" ]; then
       # LightDM (Raspberry Pi OS / Ubuntu alternatives)
