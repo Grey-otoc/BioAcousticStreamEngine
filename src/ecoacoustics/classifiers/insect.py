@@ -93,7 +93,7 @@ class InsectClassifier(BaseClassifier):
         # Require a species to score above min_confidence in this many consecutive
         # 3-second chunks before it is reported. Filters sporadic false positives
         # caused by ambient noise — real stridulation is sustained, not one-shot.
-        self._confirm_chunks: int = max(1, int(config.get("confirm_chunks", 2)))
+        self._confirm_chunks: int = max(1, int(config.get("confirm_chunks", 3)))
         self._model = None
         self._classes: list[str] = []
         # Per-species consecutive-hit counter (reset when a species misses a chunk)
