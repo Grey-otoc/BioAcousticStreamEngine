@@ -184,15 +184,11 @@ def _mic_key(name: str) -> str:
     return "mic_" + re.sub(r"[^a-z0-9]+", "_", (name or "").lower()).strip("_")
 
 
-@router.post("/pipeline/start_mics")
-def start_mics(name: str = "", only: list[str] | None = None):
-    """Start one pipeline per configured monitoring location that has classifiers assigned.
+def start_mics(name: str = "", only: list[str] | None = None) -> dict:
+    """Start monitoring locations. Internal helper — call directly or via the route.
 
-    Pass name= to start a single location by name; omit to start all configured locations.
-    Pass only= (list of names) to restrict which locations are started — used by autostart
-    on reboot to restore exactly the locations that were running before shutdown.
-    Each location's own schedule field (auto | manual) determines whether it runs
-    against the schedule windows or starts in immediate listen-now (wake) mode.
+    name: start only this location (by name); empty = all.
+    only: allowlist of names for autostart-on-reboot; None = no filter.
     """
     with open(Path("config/settings.yaml")) as f:
         cfg = yaml.safe_load(f)
@@ -227,7 +223,6 @@ def start_mics(name: str = "", only: list[str] | None = None):
         mgr = _ensure_pipeline(key, device_index=None, device_name=mic_name,
                                config_override=config_override, mic_name=mic_name)
 
-        # Respect per-location schedule setting: manual → wake now, auto → follow schedule
         mic_mode = mic.get("schedule", "auto")
         ok = mgr.start_wake() if mic_mode == "manual" else mgr.start_schedule()
         (started if ok else already_running).append(mic_name)
@@ -235,3 +230,9 @@ def start_mics(name: str = "", only: list[str] | None = None):
             _track_mic_active(mic_name, True)
 
     return {"started": started, "already_running": already_running, "skipped": skipped}
+
+
+@router.post("/pipeline/start_mics")
+def start_mics_route(name: str = ""):
+    """HTTP route — start one or all configured monitoring locations."""
+    return start_mics(name=name)
