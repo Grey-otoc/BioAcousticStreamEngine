@@ -102,15 +102,23 @@ async def _delayed_autostart(mgr, delay_secs: int = 20) -> None:
 
     from ecoacoustics.api.routes.status import start_mics
 
+    # Restore only the mics that were running before the shutdown.
+    # active_mics is populated by start_mics/stop_pipeline at runtime so it
+    # always reflects the last-known recording state. Fall back to starting all
+    # configured mics if the list is absent (e.g. first boot or old config).
+    active_mics: list[str] | None = a_cfg.get("active_mics") or None
+
     for attempt in range(1, 4):
         try:
             with open(CONFIG_PATH) as f:
                 settings = yaml.safe_load(f) or {}
             mics_with_clfs = [m for m in (settings.get("mics") or []) if m.get("classifiers")]
             if mics_with_clfs:
-                _log.info("Autostart (attempt %d): resuming %d monitoring location(s)",
-                          attempt, len(mics_with_clfs))
-                result = start_mics()
+                targets = len(active_mics) if active_mics is not None else len(mics_with_clfs)
+                _log.info("Autostart (attempt %d): resuming %d monitoring location(s)%s",
+                          attempt, targets,
+                          f" {active_mics}" if active_mics else " (all configured)")
+                result = start_mics(only=active_mics)
                 if result.get("started"):
                     _log.info("Autostart: started %s", result["started"])
                     return

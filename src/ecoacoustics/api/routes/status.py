@@ -12,10 +12,43 @@ from fastapi import APIRouter, HTTPException
 _AUTOSTART = Path("config/autostart.yaml")
 
 
+def _load_autostart() -> dict:
+    try:
+        if _AUTOSTART.exists():
+            with open(_AUTOSTART) as f:
+                return yaml.safe_load(f) or {}
+    except Exception:
+        pass
+    return {}
+
+
 def _save_autostart(enabled: bool) -> None:
     try:
+        data = _load_autostart()
+        data["enabled"] = enabled
+        if not enabled:
+            data["active_mics"] = []
         with open(_AUTOSTART, "w") as f:
-            yaml.dump({"enabled": enabled}, f)
+            yaml.dump(data, f)
+    except Exception:
+        pass
+
+
+def _track_mic_active(mic_name: str, active: bool) -> None:
+    """Add or remove a mic from the persisted active_mics list.
+
+    This lets autostart on reboot restore exactly which locations were
+    running — stopping one mic doesn't disable the others.
+    """
+    try:
+        data = _load_autostart()
+        mics = [m for m in (data.get("active_mics") or []) if m != mic_name]
+        if active:
+            mics.append(mic_name)
+        data["active_mics"] = mics
+        data["enabled"] = bool(mics)
+        with open(_AUTOSTART, "w") as f:
+            yaml.dump(data, f)
     except Exception:
         pass
 
@@ -103,10 +136,14 @@ def start_schedule(device_key: str = "default", device_index: int = None, device
 def stop_pipeline(device_key: str = "default"):
     if device_key not in state.pipeline_instances:
         raise HTTPException(404, f"No pipeline found for '{device_key}'")
-    ok = state.pipeline_instances[device_key].stop()
+    mgr = state.pipeline_instances[device_key]
+    ok = mgr.stop()
     if not ok:
         raise HTTPException(400, f"Device '{device_key}' is not running")
-    _save_autostart(False)
+    if mgr._mic_name:
+        _track_mic_active(mgr._mic_name, False)
+    else:
+        _save_autostart(False)
     return {"stopped": True, "device_key": device_key}
 
 
@@ -148,10 +185,12 @@ def _mic_key(name: str) -> str:
 
 
 @router.post("/pipeline/start_mics")
-def start_mics(name: str = ""):
+def start_mics(name: str = "", only: list[str] | None = None):
     """Start one pipeline per configured monitoring location that has classifiers assigned.
 
-    Pass name= to start a single location; omit to start all configured locations.
+    Pass name= to start a single location by name; omit to start all configured locations.
+    Pass only= (list of names) to restrict which locations are started — used by autostart
+    on reboot to restore exactly the locations that were running before shutdown.
     Each location's own schedule field (auto | manual) determines whether it runs
     against the schedule windows or starts in immediate listen-now (wake) mode.
     """
@@ -162,18 +201,21 @@ def start_mics(name: str = ""):
     started, already_running, skipped = [], [], []
 
     for mic in mics:
-        # Filter to a specific location when name is supplied
-        if name and mic.get("name", "") != name:
+        mic_name = mic.get("name", "")
+
+        if name and mic_name != name:
+            continue
+        if only is not None and mic_name not in only:
             continue
 
         clf_list = mic.get("classifiers") or []
         device = mic.get("device") or None
 
         if not clf_list:
-            skipped.append(mic.get("name", "?"))
+            skipped.append(mic_name or "?")
             continue
 
-        key = _mic_key(mic["name"])
+        key = _mic_key(mic_name)
         config_override = {
             "classifiers": {
                 "active": clf_list,
@@ -182,15 +224,14 @@ def start_mics(name: str = ""):
             "mics": [mic],
         }
 
-        mgr = _ensure_pipeline(key, device_index=None, device_name=mic["name"],
-                               config_override=config_override, mic_name=mic["name"])
+        mgr = _ensure_pipeline(key, device_index=None, device_name=mic_name,
+                               config_override=config_override, mic_name=mic_name)
 
         # Respect per-location schedule setting: manual → wake now, auto → follow schedule
         mic_mode = mic.get("schedule", "auto")
         ok = mgr.start_wake() if mic_mode == "manual" else mgr.start_schedule()
-        (started if ok else already_running).append(mic["name"])
-
-    if started:
-        _save_autostart(True)
+        (started if ok else already_running).append(mic_name)
+        if ok:
+            _track_mic_active(mic_name, True)
 
     return {"started": started, "already_running": already_running, "skipped": skipped}
