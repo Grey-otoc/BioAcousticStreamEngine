@@ -112,7 +112,8 @@ class BatClassifier(BaseClassifier):
         self._capture_rate: int = config.get("capture_rate", 256000)
         self._min_det_conf: float = config.get("min_det_confidence", 0.5)
         self._min_class_conf: float = config.get("min_class_confidence", 0.4)
-        self._silence_threshold: float = config.get("silence_threshold", 0.0001)
+        self._silence_threshold: float = config.get("silence_threshold", 0.01)
+        self._report_cooldown: float = config.get("report_cooldown_secs", 30.0)
         self._model = None
         self._bd2_config: Optional[dict] = None
         self._tmp_path: Optional[str] = None
@@ -131,6 +132,11 @@ class BatClassifier(BaseClassifier):
     def freq_max_hz(self) -> int:
         """Upper edge of the ultrasonic bandpass filter (model ceiling is 120 kHz)."""
         return 120_000
+
+    @property
+    def report_cooldown_secs(self) -> float:
+        """Minimum seconds between reporting the same species (default 30)."""
+        return self._report_cooldown
 
     def load(self) -> None:
         """Load the BatDetect2 PyTorch model and prepare the processing config.

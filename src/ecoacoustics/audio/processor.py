@@ -78,16 +78,20 @@ class AudioProcessor:
         return librosa.resample(audio, orig_sr=src_rate, target_sr=dst_rate)
 
     def _bandpass(self, audio: np.ndarray, sr: int) -> np.ndarray:
-        """Apply a 5th-order Butterworth bandpass (or highpass/lowpass) filter."""
+        """Apply a 5th-order Butterworth bandpass (or highpass/lowpass) filter.
+
+        Uses second-order sections (SOS) form which is numerically stable at
+        high sample rates and extreme cutoff frequencies (e.g. 384 kHz bat).
+        """
         nyq = sr / 2.0
         low = (self.freq_min_hz / nyq) if self.freq_min_hz else None
         high = (self.freq_max_hz / nyq) if self.freq_max_hz else None
 
         if low and high:
-            b, a = signal.butter(5, [low, high], btype="band")
+            sos = signal.butter(5, [low, high], btype="band", output="sos")
         elif low:
-            b, a = signal.butter(5, low, btype="high")
+            sos = signal.butter(5, low, btype="high", output="sos")
         else:
-            b, a = signal.butter(5, high, btype="low")
+            sos = signal.butter(5, high, btype="low", output="sos")
 
-        return signal.lfilter(b, a, audio).astype(np.float32)
+        return signal.sosfilt(sos, audio).astype(np.float32)
