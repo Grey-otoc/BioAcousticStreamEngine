@@ -3250,6 +3250,17 @@ function _specDraw() {
 
 window.toggleSpectrogram = toggleSpectrogram;
 
+/* ── Test File — data declared here so they're initialised before router.init() ── */
+let _tfFile = null;
+const _CLASSIFIERS = [
+  { id: 'bird',   label: '🐦 Bird',   note: 'BirdNET · 48 kHz' },
+  { id: 'bat',    label: '🦇 Bat',    note: 'BatDetect2 · 384 kHz' },
+  { id: 'bee',    label: '🐝 Bee',    note: 'BuzzDetect · 16 kHz' },
+  { id: 'insect', label: '🦗 Insect', note: 'Orthoptera CNN · 44.1 kHz' },
+  { id: 'soil',   label: '🌱 Soil',   note: 'SAI v2 · 22 kHz' },
+  { id: 'water',  label: '💧 Water',  note: 'WAI · 44.1 kHz' },
+];
+
 /* ── Boot ── */
 router.init();
 ws.connect();
@@ -3329,17 +3340,6 @@ async function toggleBoot() {
 }
 
 /* ── Test File page ─────────────────────────────────────────────────────────── */
-
-let _tfFile = null;   // holds the selected/dropped File object across the two functions
-
-const _CLASSIFIERS = [
-  { id: 'bird',   label: '🐦 Bird',   note: 'BirdNET · 48 kHz' },
-  { id: 'bat',    label: '🦇 Bat',    note: 'BatDetect2 · 384 kHz' },
-  { id: 'bee',    label: '🐝 Bee',    note: 'BuzzDetect · 16 kHz' },
-  { id: 'insect', label: '🦗 Insect', note: 'Orthoptera CNN · 44.1 kHz' },
-  { id: 'soil',   label: '🌱 Soil',   note: 'SAI v2 · 22 kHz' },
-  { id: 'water',  label: '💧 Water',  note: 'WAI · 44.1 kHz' },
-];
 
 function renderTestFile() {
   document.getElementById('main').innerHTML = `
