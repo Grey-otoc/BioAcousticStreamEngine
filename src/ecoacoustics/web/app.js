@@ -3378,7 +3378,7 @@ function renderTestFile() {
       <label style="font-size:.85rem">
         Detection confidence
         <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <input type="range" id="tf-det-conf" min="0.05" max="0.95" step="0.05" value="0.4"
+          <input type="range" id="tf-det-conf" min="0.01" max="0.95" step="0.01" value="0.4"
             oninput="document.getElementById('tf-det-val').textContent=parseFloat(this.value).toFixed(2)"
             style="flex:1">
           <span id="tf-det-val" style="font-size:.85rem;font-weight:600;min-width:34px">0.40</span>
@@ -3387,7 +3387,7 @@ function renderTestFile() {
       <label style="font-size:.85rem">
         Class confidence
         <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-          <input type="range" id="tf-class-conf" min="0.05" max="0.95" step="0.05" value="0.4"
+          <input type="range" id="tf-class-conf" min="0.01" max="0.95" step="0.01" value="0.4"
             oninput="document.getElementById('tf-class-val').textContent=parseFloat(this.value).toFixed(2)"
             style="flex:1">
           <span id="tf-class-val" style="font-size:.85rem;font-weight:600;min-width:34px">0.40</span>
