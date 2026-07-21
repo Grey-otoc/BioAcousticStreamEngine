@@ -60,6 +60,8 @@ def _load_cfg() -> dict:
 async def classify_file(
     file: UploadFile = File(...),
     classifiers: list[str] = Query(...),
+    det_conf: float | None = Query(default=None),
+    class_conf: float | None = Query(default=None),
 ) -> list[dict]:
     """
     Upload a WAV file and classify it with one or more classifiers.
@@ -94,6 +96,11 @@ async def classify_file(
 
         clf_cfg = dict(cfg.get(name, {}))
         clf_cfg["report_cooldown_secs"] = 0  # never suppress results in test mode
+        if name == "bat":
+            if det_conf is not None:
+                clf_cfg["min_det_confidence"] = det_conf
+            if class_conf is not None:
+                clf_cfg["min_class_confidence"] = class_conf
 
         clf_class = REGISTRY[name]
         clf = clf_class(clf_cfg)

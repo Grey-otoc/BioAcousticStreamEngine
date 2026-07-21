@@ -3372,6 +3372,30 @@ function renderTestFile() {
     </div>
   </div>
 
+  <div style="margin-top:20px">
+    <div style="font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🦇 Bat thresholds <span style="font-weight:400;text-transform:none;letter-spacing:0">(override for this test only)</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <label style="font-size:.85rem">
+        Detection confidence
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <input type="range" id="tf-det-conf" min="0.05" max="0.95" step="0.05" value="0.4"
+            oninput="document.getElementById('tf-det-val').textContent=parseFloat(this.value).toFixed(2)"
+            style="flex:1">
+          <span id="tf-det-val" style="font-size:.85rem;font-weight:600;min-width:34px">0.40</span>
+        </div>
+      </label>
+      <label style="font-size:.85rem">
+        Class confidence
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <input type="range" id="tf-class-conf" min="0.05" max="0.95" step="0.05" value="0.4"
+            oninput="document.getElementById('tf-class-val').textContent=parseFloat(this.value).toFixed(2)"
+            style="flex:1">
+          <span id="tf-class-val" style="font-size:.85rem;font-weight:600;min-width:34px">0.40</span>
+        </div>
+      </label>
+    </div>
+  </div>
+
   <div style="margin-top:20px;display:flex;gap:10px;align-items:center">
     <button class="btn btn-primary" id="tf-run" disabled onclick="runTestFile()">Run classifiers</button>
     <span id="tf-status" style="font-size:.85rem;color:var(--muted)"></span>
@@ -3478,7 +3502,13 @@ async function runTestFile() {
   results.innerHTML  = '';
 
   try {
-    const qs  = selected.map(c => `classifiers=${encodeURIComponent(c)}`).join('&');
+    const detConf   = document.getElementById('tf-det-conf')?.value   ?? '0.4';
+    const classConf = document.getElementById('tf-class-conf')?.value ?? '0.4';
+    const qs  = [
+      ...selected.map(c => `classifiers=${encodeURIComponent(c)}`),
+      `det_conf=${detConf}`,
+      `class_conf=${classConf}`,
+    ].join('&');
     const fd  = new FormData();
     fd.append('file', _tfFile);
 
