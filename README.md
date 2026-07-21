@@ -49,6 +49,8 @@ This project was born from a belief that technology can bring people closer to t
 - **Kiosk mode** — `start_kiosk.sh` launches Chrome or Firefox in full-screen kiosk mode pointing at `localhost:8000`; `install.sh` creates a desktop shortcut and an `~/.config/autostart/` entry so the display comes up automatically on login
 - **Species gallery** — live photo grid that populates as species are detected; confidence filter, detection counts, CC attribution overlays; replace stock images with your own photographs via the built-in upload tool
 - **BASE Viewer** — a separate ambient display page (`/viewer/`) showing live species detections as a full-screen photo grid with sounds; suitable for kiosks, public screens, and Yodeck deployments; PWA-ready with service worker caching for instant load from home screen; reconnects to MQTT automatically when returning from background
+- **Test File** — upload any WAV recording from the browser, select one or more classifiers, and see detections on screen instantly; bat detection and classification confidence thresholds are adjustable per-test without touching production settings
+- **Automated test suite** — 85 end-to-end tests covering all six classifiers; runs against real captured clips; `bash run_tests.sh` to repeat at any time — see [docs/testing.md](docs/testing.md)
 - **Extensible architecture** — water, insect, and additional classifiers slot in via the REGISTRY pattern
 
 ---
@@ -966,7 +968,11 @@ Restart BASE — insect detections will appear in the live feed immediately.
 - [x] BASE Viewer PWA — service worker caching, instant load from home screen, automatic MQTT reconnect on return from background
 - [x] Analytics dashboard — date-range filters, activity chart with weather overlay, species trend cards, interactive monitoring-location map
 - [x] Spectrogram classifier presets — auto-zoom frequency range and sensitivity per organism type; bat frequency division for headphone monitoring
-- [x] Kiosk mode — `start_kiosk.sh` + desktop shortcut + autostart entry; full-screen Chrome/Firefox launch
+- [x] Kiosk mode — `start_kiosk.sh` + desktop shortcut + autostart entry; full-screen Chrome/Firefox launch; fixed silent autostart failures (logging, startup delay, PATH)
+- [x] Bat false-positive reduction — per-detection cooldown, raised silence threshold, numerically stable SOS bandpass filter
+- [x] Insect silence-gate fix — hit counter now resets on silence so the confirm_chunks gate can't be satisfied across a gap
+- [x] Test File page — upload a WAV from the browser and run it through any classifier; adjustable bat thresholds per test run
+- [x] Automated test suite — 85 end-to-end tests across all six classifiers; `bash run_tests.sh`
 - [ ] Water classifier calibration against labelled hydrophone recordings from the Great Lake
 - [ ] Insect classifier v2 — improved model with larger training dataset
 

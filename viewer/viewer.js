@@ -3,7 +3,7 @@
 // ── Constants ────────────────────────────────────────────────────────────────
 
 // Application version — single source of truth is pyproject.toml; scripts/sync_version.py patches this line.
-const BASE_VERSION = '1.1.0';
+const BASE_VERSION = '1.1.1';
 
 const DB_NAME    = 'base-viewer';
 const DB_VERSION = 1;  // IndexedDB schema version — only increment on schema changes

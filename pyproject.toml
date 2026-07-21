@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ecoacoustics"
-version = "1.1.0"
+version = "1.1.1"
 description = "Real-time acoustic monitoring for birds, bats, insects, and soil"
 requires-python = ">=3.10"
 dependencies = [
