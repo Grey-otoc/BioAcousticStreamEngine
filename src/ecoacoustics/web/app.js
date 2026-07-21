@@ -3325,6 +3325,8 @@ async function toggleBoot() {
 
 /* ── Test File page ─────────────────────────────────────────────────────────── */
 
+let _tfFile = null;   // holds the selected/dropped File object across the two functions
+
 const _CLASSIFIERS = [
   { id: 'bird',   label: '🐦 Bird',   note: 'BirdNET · 48 kHz' },
   { id: 'bat',    label: '🦇 Bat',    note: 'BatDetect2 · 384 kHz' },
@@ -3437,11 +3439,13 @@ function renderTestFile() {
 
   function setFile(file) {
     if (!file) return;
+    _tfFile = file;   // store in module-level var so runTestFile can reach it
     label.textContent = `📄 ${file.name}  (${(file.size / 1024).toFixed(0)} KB)`;
     dropzone.classList.add('has-file');
     runBtn.disabled = false;
   }
 
+  _tfFile = null;  // reset on each page render
   input.addEventListener('change', () => setFile(input.files[0]));
 
   dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
@@ -3450,17 +3454,16 @@ function renderTestFile() {
     e.preventDefault();
     dropzone.classList.remove('drag-over');
     const file = e.dataTransfer.files[0];
-    if (file) { input.files = e.dataTransfer.files; setFile(file); }
+    if (file) setFile(file);  // input.files is read-only; use _tfFile instead
   });
 }
 
 async function runTestFile() {
-  const input    = document.getElementById('tf-file');
   const runBtn   = document.getElementById('tf-run');
   const status   = document.getElementById('tf-status');
   const results  = document.getElementById('tf-results');
 
-  if (!input.files.length) return;
+  if (!_tfFile) { toast('Please select a WAV file first', 'warn'); return; }
 
   const selected = [...document.querySelectorAll('.tf-clf-check:checked')].map(el => el.value);
   if (!selected.length) { toast('Select at least one classifier', 'warn'); return; }
@@ -3472,7 +3475,7 @@ async function runTestFile() {
   try {
     const qs  = selected.map(c => `classifiers=${encodeURIComponent(c)}`).join('&');
     const fd  = new FormData();
-    fd.append('file', input.files[0]);
+    fd.append('file', _tfFile);
 
     const res = await fetch(`/api/test/classify?${qs}`, { method: 'POST', body: fd });
     if (!res.ok) {
