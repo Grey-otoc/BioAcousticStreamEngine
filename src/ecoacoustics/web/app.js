@@ -175,7 +175,12 @@ const router = {
     document.querySelectorAll('nav a').forEach(a =>
       a.classList.toggle('active', a.getAttribute('href') === `#${page}`)
     );
-    ({ dashboard: renderDashboard, gallery: renderGallery, schedule: renderSchedule, clips: renderClips, reports: renderReports, analytics: renderAnalytics, settings: renderSettings, testfile: renderTestFile }[page] || renderDashboard)();
+    try {
+      ({ dashboard: renderDashboard, gallery: renderGallery, schedule: renderSchedule, clips: renderClips, reports: renderReports, analytics: renderAnalytics, settings: renderSettings, testfile: renderTestFile }[page] || renderDashboard)();
+    } catch (err) {
+      document.getElementById('main').innerHTML = `<div style="padding:32px;color:var(--danger,#e55)"><strong>Page error:</strong> ${err.message}</div>`;
+      console.error('Router render error:', err);
+    }
   },
 };
 
