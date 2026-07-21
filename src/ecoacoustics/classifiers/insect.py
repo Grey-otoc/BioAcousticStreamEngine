@@ -172,8 +172,11 @@ class InsectClassifier(BaseClassifier):
 
         audio = chunk.data.astype(np.float32)
 
-        # Skip inference on near-silent chunks — OpenSoundscape is expensive
+        # Skip inference on near-silent chunks — OpenSoundscape is expensive.
+        # Also reset hit counters: silence breaks any in-progress confirmation
+        # sequence so a species can't be confirmed across a gap.
         if np.sqrt(np.mean(audio ** 2)) < self._silence_threshold:
+            self._hit_count.clear()
             return []
 
         detections: list[Detection] = []
