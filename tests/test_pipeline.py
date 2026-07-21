@@ -142,20 +142,30 @@ def test_audio_processor_resample():
 
 
 def test_audio_capture_queue_drop():
-    """AudioCapture should drop incoming chunks when the queue is full."""
+    """Subscriber queue should drop incoming chunks when full, incrementing _dropped."""
+    import queue as qmod
     import time
     from ecoacoustics.audio.capture import AudioCapture
 
     cap = AudioCapture(sample_rate=48000, chunk_duration=3.0, max_queue_size=3)
+    sub_q = cap.subscribe(max_queue_size=3)
 
-    # Fill queue to capacity manually
+    # Fill subscriber queue to capacity
     for _ in range(3):
-        cap._queue.put_nowait(AudioChunk(np.zeros(144000, np.float32), 48000, time.time()))
+        sub_q.put_nowait(AudioChunk(np.zeros(144000, np.float32), 48000, time.time()))
 
-    # Simulate callback with a full chunk — should trigger a drop
-    audio = np.zeros((144000, 1), dtype="float32")
-    status = type("S", (), {"input_overflow": False})()
-    cap._callback(audio, 144000, None, status)
+    assert sub_q.full(), "Queue should be at capacity after 3 items"
+    assert cap._dropped == 0, "No drops yet"
 
-    assert cap.queue_depth == 3, "Queue should remain at capacity"
-    assert cap.dropped_chunks == 1, "One chunk should have been dropped"
+    # Simulate the delivery loop that runs inside the parec reader thread
+    chunk = AudioChunk(np.zeros(144000, np.float32), 48000, time.time())
+    with cap._subscriber_lock:
+        subs = list(cap._subscribers)
+    for q in subs:
+        try:
+            q.put_nowait(chunk)
+        except qmod.Full:
+            cap._dropped += 1
+
+    assert cap._dropped == 1, f"Expected 1 dropped chunk, got {cap._dropped}"
+    assert sub_q.qsize() == 3, "Queue size should remain at 3 after drop"

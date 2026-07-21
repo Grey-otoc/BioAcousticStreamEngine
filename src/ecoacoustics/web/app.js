@@ -175,7 +175,7 @@ const router = {
     document.querySelectorAll('nav a').forEach(a =>
       a.classList.toggle('active', a.getAttribute('href') === `#${page}`)
     );
-    ({ dashboard: renderDashboard, gallery: renderGallery, schedule: renderSchedule, clips: renderClips, reports: renderReports, analytics: renderAnalytics, settings: renderSettings }[page] || renderDashboard)();
+    ({ dashboard: renderDashboard, gallery: renderGallery, schedule: renderSchedule, clips: renderClips, reports: renderReports, analytics: renderAnalytics, settings: renderSettings, testfile: renderTestFile }[page] || renderDashboard)();
   },
 };
 
@@ -3321,4 +3321,227 @@ async function toggleBoot() {
     toggle.style.opacity = '';
     toggle.style.pointerEvents = '';
   }
+}
+
+/* ── Test File page ─────────────────────────────────────────────────────────── */
+
+const _CLASSIFIERS = [
+  { id: 'bird',   label: '🐦 Bird',   note: 'BirdNET · 48 kHz' },
+  { id: 'bat',    label: '🦇 Bat',    note: 'BatDetect2 · 384 kHz' },
+  { id: 'bee',    label: '🐝 Bee',    note: 'BuzzDetect · 16 kHz' },
+  { id: 'insect', label: '🦗 Insect', note: 'Orthoptera CNN · 44.1 kHz' },
+  { id: 'soil',   label: '🌱 Soil',   note: 'SAI v2 · 22 kHz' },
+  { id: 'water',  label: '💧 Water',  note: 'WAI · 44.1 kHz' },
+];
+
+function renderTestFile() {
+  document.getElementById('main').innerHTML = `
+<div class="page-header">
+  <h2>Test Audio File</h2>
+  <p class="page-subtitle">Upload a WAV recording and run it through any classifier to see what BASE detects.</p>
+</div>
+
+<div class="card" style="max-width:680px">
+
+  <div id="tf-dropzone" class="tf-dropzone" onclick="document.getElementById('tf-file').click()">
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:8px;opacity:.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <div id="tf-drop-label">Drop a WAV file here or click to browse</div>
+    <div style="font-size:.75rem;color:var(--muted);margin-top:4px">WAV format · mono or stereo · any sample rate</div>
+  </div>
+  <input type="file" id="tf-file" accept=".wav,audio/wav,audio/wave" style="display:none">
+
+  <div style="margin-top:20px">
+    <div style="font-size:.8rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Classifiers</div>
+    <div class="tf-clf-grid">
+      ${_CLASSIFIERS.map(c => `
+      <label class="tf-clf-card" id="tf-card-${c.id}">
+        <input type="checkbox" class="tf-clf-check" value="${c.id}" checked>
+        <span class="tf-clf-label">${c.label}</span>
+        <span class="tf-clf-note">${c.note}</span>
+      </label>`).join('')}
+    </div>
+    <div style="font-size:.75rem;color:var(--muted);margin-top:8px">
+      🦇 Bat classifier requires a 384 kHz AudioMoth recording — standard microphone files will show no detections.
+    </div>
+  </div>
+
+  <div style="margin-top:20px;display:flex;gap:10px;align-items:center">
+    <button class="btn btn-primary" id="tf-run" disabled onclick="runTestFile()">Run classifiers</button>
+    <span id="tf-status" style="font-size:.85rem;color:var(--muted)"></span>
+  </div>
+</div>
+
+<div id="tf-results" style="max-width:680px;margin-top:16px"></div>
+
+<style>
+.tf-dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 32px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+  color: var(--text);
+  font-size: .9rem;
+}
+.tf-dropzone:hover, .tf-dropzone.drag-over {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+.tf-dropzone.has-file { border-style: solid; border-color: var(--primary); }
+.tf-clf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+  gap: 8px;
+}
+.tf-clf-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  user-select: none;
+}
+.tf-clf-card:has(.tf-clf-check:checked) {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+.tf-clf-card input { display: none; }
+.tf-clf-label { font-size: .9rem; font-weight: 600; }
+.tf-clf-note  { font-size: .72rem; color: var(--muted); }
+.tf-result-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.tf-result-row:last-child { border-bottom: none; }
+.tf-conf-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--primary);
+  opacity: .7;
+}
+.tf-no-results { text-align:center; padding: 32px; color: var(--muted); font-size: .9rem; }
+</style>`;
+
+  // ── File drop/select wiring ───────────────────────────────────────────────
+  const input    = document.getElementById('tf-file');
+  const dropzone = document.getElementById('tf-dropzone');
+  const runBtn   = document.getElementById('tf-run');
+  const label    = document.getElementById('tf-drop-label');
+
+  function setFile(file) {
+    if (!file) return;
+    label.textContent = `📄 ${file.name}  (${(file.size / 1024).toFixed(0)} KB)`;
+    dropzone.classList.add('has-file');
+    runBtn.disabled = false;
+  }
+
+  input.addEventListener('change', () => setFile(input.files[0]));
+
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
+  dropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropzone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) { input.files = e.dataTransfer.files; setFile(file); }
+  });
+}
+
+async function runTestFile() {
+  const input    = document.getElementById('tf-file');
+  const runBtn   = document.getElementById('tf-run');
+  const status   = document.getElementById('tf-status');
+  const results  = document.getElementById('tf-results');
+
+  if (!input.files.length) return;
+
+  const selected = [...document.querySelectorAll('.tf-clf-check:checked')].map(el => el.value);
+  if (!selected.length) { toast('Select at least one classifier', 'warn'); return; }
+
+  runBtn.disabled   = true;
+  status.textContent = 'Running… this may take 10–30 seconds';
+  results.innerHTML  = '';
+
+  try {
+    const qs  = selected.map(c => `classifiers=${encodeURIComponent(c)}`).join('&');
+    const fd  = new FormData();
+    fd.append('file', input.files[0]);
+
+    const res = await fetch(`/api/test/classify?${qs}`, { method: 'POST', body: fd });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const detail = Array.isArray(body.detail)
+        ? body.detail.map(e => e.msg || JSON.stringify(e)).join('; ')
+        : body.detail || `Server error (${res.status})`;
+      throw new Error(detail);
+    }
+
+    const dets = await res.json();
+    status.textContent = `${dets.filter(d => d.label).length} detection(s) found`;
+    _renderTestResults(results, dets, selected);
+
+  } catch (err) {
+    status.textContent = '';
+    toast(err.message, 'error', 6000);
+  } finally {
+    runBtn.disabled = false;
+  }
+}
+
+function _renderTestResults(container, dets, classifiers) {
+  const byClassifier = {};
+  for (const c of classifiers) byClassifier[c] = [];
+  for (const d of dets) {
+    if (d.label) (byClassifier[d.classifier] ||= []).push(d);
+  }
+
+  const sections = classifiers.map(id => {
+    const cfg   = _CLASSIFIERS.find(c => c.id === id);
+    const items = byClassifier[id] || [];
+
+    const rows = items.length
+      ? items.sort((a, b) => b.confidence - a.confidence).map(d => `
+        <div class="tf-result-row">
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:.9rem">${d.label}</div>
+            ${d.metadata?.scientific_name ? `<div style="font-size:.75rem;color:var(--muted);font-style:italic">${d.metadata.scientific_name}</div>` : ''}
+            ${_metaSnippet(d.metadata)}
+          </div>
+          <div style="text-align:right;min-width:70px">
+            <div style="font-size:.85rem;font-weight:600">${(d.confidence * 100).toFixed(1)}%</div>
+            <div class="tf-conf-bar" style="width:${Math.round(d.confidence * 100)}%"></div>
+          </div>
+        </div>`).join('')
+      : `<div class="tf-no-results">No detections — try a different recording or lower the confidence threshold in settings</div>`;
+
+    return `
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <strong style="font-size:.9rem">${cfg?.label || id}</strong>
+        <span style="font-size:.75rem;color:var(--muted)">${cfg?.note || ''}</span>
+        ${items.length ? `<span style="margin-left:auto;font-size:.75rem;font-weight:600;color:var(--primary)">${items.length} detection${items.length !== 1 ? 's' : ''}</span>` : ''}
+      </div>
+      ${rows}
+    </div>`;
+  });
+
+  container.innerHTML = sections.join('');
+}
+
+function _metaSnippet(meta) {
+  if (!meta) return '';
+  const parts = [];
+  if (meta.low_freq_hz)   parts.push(`${(meta.low_freq_hz / 1000).toFixed(1)} kHz`);
+  if (meta.det_prob)      parts.push(`det ${(meta.det_prob * 100).toFixed(0)}%`);
+  if (meta.group)         parts.push(meta.group);
+  if (meta.activity_level) parts.push(meta.activity_level);
+  if (meta.error)         parts.push(`⚠ ${meta.error}`);
+  return parts.length ? `<div style="font-size:.72rem;color:var(--muted);margin-top:2px">${parts.join(' · ')}</div>` : '';
 }

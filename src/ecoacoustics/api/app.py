@@ -40,7 +40,7 @@ class NoCacheStaticFiles(StaticFiles):
 
 from ecoacoustics.api import state
 from ecoacoustics.api.pipeline_manager import PipelineManager
-from ecoacoustics.api.routes import analytics, clips, detections, devices, gallery, reports, schedule, settings, spectrogram, status, system
+from ecoacoustics.api.routes import analytics, clips, detections, devices, gallery, reports, schedule, settings, spectrogram, status, system, test_file
 from ecoacoustics.output.heartbeat import heartbeat_loop
 
 CONFIG_PATH = "config/settings.yaml"
@@ -169,6 +169,7 @@ app.include_router(settings.router, prefix="/api")
 app.include_router(gallery.router, prefix="/api")
 app.include_router(spectrogram.router, prefix="/api")
 app.include_router(system.router, prefix="/api")
+app.include_router(test_file.router, prefix="/api")
 
 
 # ── WebSocket — must be before the StaticFiles mount ──

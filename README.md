@@ -972,6 +972,54 @@ Restart BASE — insect detections will appear in the live feed immediately.
 
 ---
 
+## Testing
+
+BASE has an automated test suite that validates every classifier against real captured audio clips. You can also test your own recordings directly from the web UI.
+
+### Test your own recordings (web UI)
+
+Open the **Test File** page from the sidebar. Drop any WAV file onto the upload zone, choose which classifiers to run, and click **Run classifiers**. Results appear on screen showing species, confidence, and metadata.
+
+This is the fastest way to check whether BASE would detect a species in a particular recording — no configuration required.
+
+> **Bat note:** the bat classifier requires a 384 kHz AudioMoth recording. Standard microphone files (48 kHz) will return no detections because there is no ultrasonic content to analyse.
+
+### Automated test suite
+
+85 tests cover the full signal path for all six classifiers: `AudioChunk → AudioProcessor → Classifier → Detection`. Tests run against real saved clips from `output/clips/` so the models are validated on audio they have already confirmed as genuine.
+
+```bash
+# Run the full suite
+bash run_tests.sh
+
+# Single classifier
+bash run_tests.sh bird
+bash run_tests.sh bat
+
+# Verbose output (shows each test name)
+bash run_tests.sh -v
+
+# Stop on first failure
+bash run_tests.sh -x
+```
+
+See [docs/testing.md](docs/testing.md) for the full test inventory — what each test checks, which require a loaded model or real clips, and how to add tests for new species or classifiers.
+
+### What clips are needed
+
+Tests that use real clips `pytest.skip()` gracefully if the folder is empty. Clips accumulate automatically in `output/clips/` during normal operation. To run the full parametrized suite you need at least one clip per species in:
+
+| Classifier | Required folders |
+|------------|-----------------|
+| Bat | `output/clips/Brown_Long-eared_Bat/`, `Leisler's_Bat/`, `Natterer's_Bat/` |
+| Bird | `output/clips/Eurasian_Blue_Tit/`, `Eurasian_Blackbird/`, `Common_Swift/`, `Common_Chiffchaff/` |
+| Insect | `output/clips/Field_Cricket/`, `Field_Grasshopper/`, `Meadow_Grasshopper/`, `Great_Green_Bush-cricket/`, `Dark_Bush-cricket/`, `Common_Green_Grasshopper/` |
+| Bee | `output/clips/Honey_Bee/` |
+| Soil | `output/clips/Soil_Activity_—_High/`, `Soil_Activity_—_Moderate/` |
+| Water | None — all synthetic |
+
+---
+
 ## Dependencies
 
 ### System libraries (Linux)
