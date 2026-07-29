@@ -96,6 +96,10 @@ async def classify_file(
 
         clf_cfg = dict(cfg.get(name, {}))
         clf_cfg["report_cooldown_secs"] = 0  # never suppress results in test mode
+        if name == "insect":
+            # A single file upload is one chunk — the consecutive-hit gate can never
+            # accumulate across chunks, so disable it for test mode.
+            clf_cfg["confirm_chunks"] = 1
         if name == "bat":
             if det_conf is not None:
                 clf_cfg["min_det_confidence"] = det_conf

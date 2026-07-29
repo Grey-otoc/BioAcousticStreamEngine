@@ -3011,6 +3011,10 @@ function _startServerSpectrogram(pipewireSource) {
       _spec.serverData = msg.bins || msg;
       if (msg.rate && msg.rate !== _spec.sampleRate) {
         _spec.sampleRate = msg.rate;
+        // Rebuild the frequency axis so labels match the actual capture rate.
+        // Without this, a bat preset (384 kHz requested, 48 kHz actual) shows
+        // axis labels of 15–120 kHz while the canvas draws only 15–24 kHz bins.
+        _buildFreqAxis(_spec.sampleRate, document.getElementById('spec-log')?.checked || false, _spec.preset);
       }
     } catch { return; }
     // rAF loop is already running — just update the data buffer

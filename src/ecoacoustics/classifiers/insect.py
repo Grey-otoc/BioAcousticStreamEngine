@@ -187,16 +187,20 @@ class InsectClassifier(BaseClassifier):
 
             sf.write(tmp_path, audio, self.sample_rate, subtype="PCM_16")
 
-            # split_files_into_clips=False: treat the whole chunk as one sample so
-            # the model's preprocessor (extend=True) handles any length difference,
-            # rather than the file-splitter producing zero clips for sub-4s chunks.
+            # split_files_into_clips=True + final_clip="extend": the file is split
+            # into model-duration clips (4 s); the last clip is padded if shorter.
+            # This handles both short production chunks (3 s padded to 4 s → 1 clip)
+            # and long test uploads (e.g. 30 s → 7 clips).  Aggregating by max
+            # across all clips means a species detected anywhere in the file is found.
             scores_df = self._model.predict(
                 [tmp_path],
-                split_files_into_clips=False,
+                split_files_into_clips=True,
                 clip_overlap_fraction=0,
+                final_clip="extend",
                 batch_size=1,
                 activation_layer="sigmoid",
                 num_workers=0,
+                progress_bar=False,
             )
 
             # scores_df: index=clip paths, columns=species names, values=scores
@@ -205,7 +209,8 @@ class InsectClassifier(BaseClassifier):
                 self._hit_count.clear()
                 return []
 
-            row = scores_df.iloc[0]
+            # Max score per species across all clips
+            row = scores_df.max()
             candidates: list[Detection] = []
             triggered_labels: set[str] = set()
 

@@ -18,6 +18,7 @@ Author: David Green, Blenheim Palace
 import asyncio
 import json
 import logging
+import re
 
 import numpy as np
 from fastapi import APIRouter, Query
@@ -25,6 +26,42 @@ from starlette.responses import StreamingResponse
 
 router = APIRouter()
 _log = logging.getLogger(__name__)
+
+_HZ_RE = re.compile(r"\b(\d+)Hz\b")
+
+
+async def _detect_device_rate(device: str, fallback: int) -> int:
+    """Query PipeWire via pactl for the actual sample rate of a named source.
+
+    PipeWire sometimes resamples a high-rate device (e.g. AudioMoth at 384 kHz)
+    to the system default (48 kHz) when accessed through a .mono-fallback source.
+    Using the detected rate ensures FFT bins are labelled correctly in the browser.
+    Falls back to `fallback` if pactl is unavailable or the device isn't listed.
+    """
+    if not device:
+        return fallback
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "pactl", "list", "short", "sources",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=2.0)
+        for line in stdout.decode(errors="replace").splitlines():
+            if device in line:
+                m = _HZ_RE.search(line)
+                if m:
+                    detected = int(m.group(1))
+                    if detected != fallback:
+                        _log.warning(
+                            "spectrogram: device '%s' runs at %d Hz, not %d Hz — "
+                            "using detected rate for correct frequency labels",
+                            device, detected, fallback,
+                        )
+                    return detected
+    except Exception:
+        pass
+    return fallback
 
 _FFT_SIZE = 4096
 _BINS = _FFT_SIZE // 2                         # 2048 bins — matches browser frequencyBinCount
@@ -43,20 +80,25 @@ async def spectrogram_stream(
 
     Each SSE message: ``data: {"bins": [...], "rate": <int>}\\n\\n`` — bins are 0-255
     magnitudes (2048 values) normalised identically to AnalyserNode.getByteFrequencyData().
-    The ``rate`` field lets the browser compute correct frequency labels.
+    The ``rate`` field reflects the actual device rate (detected from PipeWire) so the
+    browser labels frequency bins correctly even when PipeWire resamples.
     """
+    # Detect the real device rate before opening the stream.  PipeWire may
+    # resample a high-rate device (e.g. AudioMoth 384 kHz) to 48 kHz via its
+    # .mono-fallback adapter — using the detected rate keeps the display honest.
+    actual_rate = await _detect_device_rate(device, rate)
 
     async def generate():
         # Hop scales with rate so temporal resolution stays ~21ms regardless of rate.
         # Must not exceed _FFT_SIZE or the ring-buffer assignment overflows.
-        hop = min(max(256, int(rate * 0.021)), _FFT_SIZE)
+        hop = min(max(256, int(actual_rate * 0.021)), _FFT_SIZE)
 
         cmd = [
             "parec",
             "--format=s16le",
             "--channels=1",
-            f"--rate={rate}",
-            f"--latency-msec={max(10, hop * 1000 // rate)}",
+            f"--rate={actual_rate}",
+            f"--latency-msec={max(10, hop * 1000 // actual_rate)}",
         ]
         if device:
             cmd += [f"--device={device}"]
@@ -98,7 +140,7 @@ async def spectrogram_stream(
                     (fft_db - _DB_MIN) / _DB_RANGE * 255.0, 0.0, 255.0
                 ).astype(np.uint8)
 
-                yield f"data: {json.dumps({'bins': fft_norm.tolist(), 'rate': rate})}\n\n"
+                yield f"data: {json.dumps({'bins': fft_norm.tolist(), 'rate': actual_rate})}\n\n"
 
         except asyncio.CancelledError:
             pass
