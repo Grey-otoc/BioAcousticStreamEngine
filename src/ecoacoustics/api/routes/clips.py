@@ -3,6 +3,8 @@
 import csv
 import io
 import json
+import logging
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -10,6 +12,9 @@ import soundfile as sf
 import yaml
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
+
+_log = logging.getLogger(__name__)
+_spec_lock = threading.Lock()  # matplotlib is not thread-safe; serialise PNG generation
 
 router = APIRouter()
 _SETTINGS = Path("config/settings.yaml")
@@ -49,6 +54,72 @@ def _species_classifier_map() -> dict[str, str]:
             mapping[name] = info.get("classifier", "bird")
 
     return mapping
+
+
+def _generate_spectrogram_png(wav_path: Path) -> bytes:
+    """Render a spectrogram PNG for a clip WAV file.
+
+    Uses inferno colormap on a dark background. Frequency range is automatically
+    set to 15–120 kHz for ultrasonic (bat) recordings and 0–16 kHz for standard.
+    The result is cached as a .png alongside the WAV on first call.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    from matplotlib import pyplot as plt
+    from matplotlib.ticker import FuncFormatter
+    import librosa
+    import librosa.display
+
+    png_path = wav_path.with_suffix(".png")
+    if png_path.exists():
+        return png_path.read_bytes()
+
+    y, sr = sf.read(str(wav_path), dtype="float32", always_2d=False)
+    if y.ndim > 1:
+        y = y[:, 0]
+
+    is_bat = sr > 100_000
+    n_fft = 2048 if is_bat else 512
+    hop = max(1, len(y) // 500)
+
+    D = np.abs(librosa.stft(y, n_fft=n_fft, hop_length=hop))
+    S_db = librosa.amplitude_to_db(D, ref=np.max)
+
+    fmin = 15_000 if is_bat else 0
+    fmax = 120_000 if is_bat else min(16_000, sr // 2)
+
+    bg = "#0f0f1a"
+    with _spec_lock:
+        fig, ax = plt.subplots(figsize=(6.5, 1.9), facecolor=bg)
+        ax.set_facecolor(bg)
+
+        librosa.display.specshow(
+            S_db, sr=sr, hop_length=hop,
+            x_axis="time", y_axis="hz",
+            fmin=fmin, fmax=fmax,
+            ax=ax, cmap="inferno",
+            vmin=-70, vmax=0,
+        )
+        ax.set_xlabel("Time (s)", color="#777", fontsize=7, labelpad=2)
+        ax.set_ylabel("", labelpad=0)
+        ax.yaxis.set_major_formatter(FuncFormatter(
+            lambda v, _: f"{v/1000:.0f}k" if v >= 1000 else f"{v:.0f}"
+        ))
+        ax.tick_params(colors="#777", labelsize=6, length=2, pad=2)
+        for spine in ax.spines.values():
+            spine.set_edgecolor("#333")
+
+        fig.tight_layout(pad=0.4)
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png", dpi=100, facecolor=bg, edgecolor="none")
+        plt.close(fig)
+
+    png_bytes = buf.getvalue()
+    try:
+        png_path.write_bytes(png_bytes)
+    except Exception as exc:
+        _log.debug("Could not cache spectrogram PNG: %s", exc)
+    return png_bytes
 
 
 def _conf_from_path(path: Path) -> float:
@@ -112,6 +183,7 @@ def list_clips(species_dir: str):
             "sample_rate": sample_rate,
             "url": f"/api/clips/{species_dir}/{wav.name}/audio",
             "download_url": f"/api/clips/{species_dir}/{wav.name}/download",
+            "spectrogram_url": f"/api/clips/{species_dir}/{wav.name}/spectrogram",
         })
 
     return {
@@ -140,6 +212,24 @@ def stream_clip(species_dir: str, filename: str):
     return Response(content=buf.read(), media_type="audio/wav")
 
 
+@router.get("/clips/{species_dir}/{filename}/spectrogram")
+def clip_spectrogram(species_dir: str, filename: str):
+    """Return a spectrogram PNG for visual validation of a clip.
+
+    Generated on first request then cached as a .png alongside the WAV.
+    """
+    path = _clips_dir() / species_dir / filename
+    if not path.exists() or path.suffix != ".wav":
+        raise HTTPException(404, "Clip not found")
+    try:
+        png = _generate_spectrogram_png(path)
+        return Response(content=png, media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=86400"})
+    except Exception as exc:
+        _log.warning("Spectrogram generation failed for %s: %s", path, exc)
+        raise HTTPException(500, "Spectrogram generation failed") from exc
+
+
 @router.get("/clips/{species_dir}/{filename}/download")
 def download_clip(species_dir: str, filename: str):
     """Serve the original unmodified clip file as a download (e.g. 384kHz bat WAV)."""
@@ -158,4 +248,5 @@ def delete_clip(species_dir: str, filename: str):
     if not path.exists():
         raise HTTPException(404, "Clip not found")
     path.unlink()
+    path.with_suffix(".png").unlink(missing_ok=True)  # remove cached spectrogram
     return {"deleted": filename}

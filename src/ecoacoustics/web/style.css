@@ -208,14 +208,23 @@ tr:hover td { background: var(--surface2); }
   margin-top: 4px;
 }
 .species-group-header:first-child { margin-top: 0; padding-top: 2px; }
-.clips-grid { display: flex; flex-direction: column; gap: 8px; max-height: 520px; overflow-y: auto; }
+.clips-grid { display: flex; flex-direction: column; gap: 10px; max-height: 800px; overflow-y: auto; }
+.clip-card {
+  background: var(--surface2); border-radius: var(--radius);
+  border: 1px solid var(--border); overflow: hidden;
+}
 .clip-row {
   display: flex; align-items: center; gap: 12px;
-  background: var(--surface2); border-radius: var(--radius);
-  padding: 10px 14px; border: 1px solid var(--border);
+  padding: 10px 14px;
 }
+.clip-card .clip-row { border-bottom: 1px solid var(--border); }
 .clip-row audio { flex: 1; height: 32px; }
 .clip-meta { font-size: 0.75rem; color: var(--muted); font-family: var(--mono); min-width: 130px; }
+.clip-spec {
+  display: block; width: 100%; height: 150px;
+  object-fit: fill; cursor: zoom-in;
+}
+.clip-spec-err { display: none; }
 
 /* ── Date inputs — shared across Reports and Analytics ── */
 input[type="date"] {

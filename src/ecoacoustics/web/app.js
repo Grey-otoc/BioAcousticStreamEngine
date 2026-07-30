@@ -1443,11 +1443,17 @@ async function loadClips(dir, name) {
       const batNote = c.sample_rate > 48000
         ? `<br><span style="font-size:0.7rem;color:var(--muted)">🦇 ${(c.sample_rate/1000).toFixed(0)}kHz → pitched down for playback</span>`
         : '';
-      return `<div class="clip-row">
-        <div class="clip-meta">${ukDate(c.date)} ${c.time}<br><span class="conf ${confClass(c.confidence)}">${Math.round(c.confidence * 100)}% conf</span>${batNote}</div>
-        <audio controls src="${c.url}" preload="none"></audio>
-        <a class="btn btn-sm btn-outline" href="${c.download_url}" download title="Download original WAV">↓</a>
-        <button class="btn btn-sm btn-danger" onclick="deleteClip('${encodedDir}','${encodeURIComponent(c.filename)}',this)">✕</button>
+      const specUrl = c.spectrogram_url || '';
+      return `<div class="clip-card">
+        <div class="clip-row">
+          <div class="clip-meta">${ukDate(c.date)} ${c.time}<br><span class="conf ${confClass(c.confidence)}">${Math.round(c.confidence * 100)}% conf</span>${batNote}</div>
+          <audio controls src="${c.url}" preload="none"></audio>
+          <a class="btn btn-sm btn-outline" href="${c.download_url}" download title="Download original WAV">↓</a>
+          <button class="btn btn-sm btn-danger" onclick="deleteClip('${encodedDir}','${encodeURIComponent(c.filename)}',this)">✕</button>
+        </div>
+        ${specUrl ? `<img class="clip-spec" src="${specUrl}" loading="lazy" alt="Spectrogram"
+          onclick="window.open('${specUrl}','_blank')"
+          onerror="this.style.display='none'">` : ''}
       </div>`;
     }).join('');
   } catch (err) { grid.innerHTML = `<div class="empty" style="color:var(--danger)">${err.message}</div>`; }
@@ -1457,7 +1463,7 @@ async function deleteClip(dir, filename, btn) {
   btnLoad(btn, '...');
   try {
     await api.del(`/api/clips/${dir}/${filename}`);
-    btn.closest('.clip-row').remove();
+    btn.closest('.clip-card').remove();
     toast('Clip deleted', 'warn');
   } catch (err) { toast(err.message, 'error', 6000); btnDone(btn); }
 }
