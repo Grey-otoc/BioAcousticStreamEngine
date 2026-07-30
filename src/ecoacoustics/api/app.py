@@ -40,7 +40,7 @@ class NoCacheStaticFiles(StaticFiles):
 
 from ecoacoustics.api import state
 from ecoacoustics.api.pipeline_manager import PipelineManager
-from ecoacoustics.api.routes import analytics, clips, detections, devices, gallery, reports, schedule, settings, spectrogram, status, system, test_file
+from ecoacoustics.api.routes import analytics, clips, detections, devices, gallery, reports, schedule, settings, spectrogram, status, system, test_file, updates
 from ecoacoustics.output.heartbeat import heartbeat_loop
 
 CONFIG_PATH = "config/settings.yaml"
@@ -150,6 +150,7 @@ async def lifespan(app: FastAPI):
     task = asyncio.create_task(_broadcast_loop())
     hb_task = asyncio.create_task(heartbeat_loop(CONFIG_PATH))
     asyncio.create_task(_delayed_autostart(mgr))
+    asyncio.create_task(updates.update_checker_loop())
     yield
     task.cancel()
     hb_task.cancel()
@@ -170,6 +171,7 @@ app.include_router(gallery.router, prefix="/api")
 app.include_router(spectrogram.router, prefix="/api")
 app.include_router(system.router, prefix="/api")
 app.include_router(test_file.router, prefix="/api")
+app.include_router(updates.router, prefix="/api")
 
 
 # ── WebSocket — must be before the StaticFiles mount ──

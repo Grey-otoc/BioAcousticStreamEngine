@@ -2229,6 +2229,41 @@ async function renderSettings() {
     </div>
 
     <div class="card">
+      <div class="card-title">Software Updates</div>
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">
+        When enabled, BASE checks GitHub for new releases and applies them automatically —
+        recording pauses briefly while the service restarts, then resumes from where it left off.
+      </p>
+
+      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;margin-bottom:16px">
+        <label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer">
+          <input type="checkbox" id="upd-enabled" style="accent-color:var(--primary);width:16px;height:16px">
+          <span>Check for updates automatically</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer" id="upd-autoapply-label">
+          <input type="checkbox" id="upd-autoapply" style="accent-color:var(--primary);width:16px;height:16px">
+          <span>Apply updates automatically</span>
+        </label>
+      </div>
+
+      <div class="form-row" style="align-items:flex-end;gap:16px;flex-wrap:wrap">
+        <div class="form-group" style="width:200px">
+          <label>Check interval</label>
+          <select id="upd-interval">
+            <option value="1">Every hour</option>
+            <option value="6">Every 6 hours</option>
+            <option value="24">Daily</option>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-save-updates">Save</button>
+        <button class="btn btn-outline btn-sm" id="btn-check-updates">Check Now</button>
+        <button class="btn btn-outline btn-sm" id="btn-apply-update" style="display:none">Apply Update</button>
+      </div>
+
+      <div id="upd-status" style="margin-top:12px;font-size:0.82rem;color:var(--muted)">Checking status…</div>
+    </div>
+
+    <div class="card">
       <div class="card-title">Auto-resume on Boot</div>
       <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px">
         When enabled, recording resumes automatically after a reboot or power cut — no manual intervention needed.
@@ -2281,6 +2316,9 @@ async function renderSettings() {
   // Load boot status
   _refreshBootStatus();
 
+  // Load update settings and status
+  _refreshUpdateStatus();
+
   document.getElementById('mqtt-mode').addEventListener('change', e => _mqttModeChanged(e.target.value));
   document.getElementById('btn-save-location').addEventListener('click', saveLocation);
   document.getElementById('btn-save-mqtt').addEventListener('click', saveMqtt);
@@ -2288,6 +2326,12 @@ async function renderSettings() {
   document.getElementById('btn-add-mic').addEventListener('click', showMicAddForm);
   document.getElementById('btn-confirm-mic').addEventListener('click', confirmAddMic);
   document.getElementById('btn-save-autostart').addEventListener('click', saveAutostart);
+  document.getElementById('btn-save-updates').addEventListener('click', saveUpdateSettings);
+  document.getElementById('btn-check-updates').addEventListener('click', checkForUpdate);
+  document.getElementById('btn-apply-update').addEventListener('click', applyUpdate);
+  document.getElementById('upd-enabled').addEventListener('change', e => {
+    document.getElementById('upd-autoapply-label').style.opacity = e.target.checked ? '1' : '0.4';
+  });
 }
 
 async function saveAutostart() {
@@ -2299,6 +2343,92 @@ async function saveAutostart() {
   } catch (err) {
     toast(err.message, 'error', 5000);
   } finally { btnDone(btn); }
+}
+
+// ── Software updates ──────────────────────────────────────────────────────────
+
+function _renderUpdateStatus(s) {
+  const el = document.getElementById('upd-status');
+  const applyBtn = document.getElementById('btn-apply-update');
+  if (!el) return;
+
+  const sha = v => v ? v.slice(0, 7) : '?';
+  let msg = '';
+
+  if (s.applying) {
+    msg = '⟳ Applying update — service will restart shortly…';
+  } else if (s.checking) {
+    msg = '⟳ Checking for updates…';
+  } else if (s.update_available) {
+    msg = `⬆ Update available — local <code>${sha(s.current_sha)}</code> → remote <code>${sha(s.remote_sha)}</code>`;
+    if (applyBtn) applyBtn.style.display = '';
+  } else if (s.last_error) {
+    msg = `⚠ ${s.last_error}`;
+  } else if (s.last_check) {
+    const ago = Math.round((Date.now() - new Date(s.last_check).getTime()) / 60000);
+    msg = `✓ Up to date — checked ${ago < 2 ? 'just now' : ago + ' min ago'} (${sha(s.current_sha)})`;
+    if (applyBtn) applyBtn.style.display = 'none';
+  } else {
+    msg = 'Not yet checked.';
+  }
+  el.innerHTML = msg;
+}
+
+async function _refreshUpdateStatus() {
+  try {
+    const s = await api.get('/api/updates/status');
+    const en = document.getElementById('upd-enabled');
+    const ap = document.getElementById('upd-autoapply');
+    const iv = document.getElementById('upd-interval');
+    if (en) en.checked = s.enabled;
+    if (ap) ap.checked = s.auto_apply;
+    if (iv) iv.value = String(s.check_interval_hours);
+    const lbl = document.getElementById('upd-autoapply-label');
+    if (lbl) lbl.style.opacity = s.enabled ? '1' : '0.4';
+    _renderUpdateStatus(s);
+  } catch { /* non-fatal */ }
+}
+
+async function saveUpdateSettings() {
+  const btn = document.getElementById('btn-save-updates');
+  btnLoad(btn, '⟳');
+  try {
+    await api.post('/api/updates/settings', {
+      enabled:              document.getElementById('upd-enabled').checked,
+      auto_apply:           document.getElementById('upd-autoapply').checked,
+      check_interval_hours: parseFloat(document.getElementById('upd-interval').value),
+    });
+    toast('Update settings saved', 'success', 3000);
+  } catch (err) {
+    toast(err.message, 'error', 5000);
+  } finally { btnDone(btn); }
+}
+
+async function checkForUpdate() {
+  const btn = document.getElementById('btn-check-updates');
+  btnLoad(btn, '⟳ Checking…');
+  try {
+    const s = await api.post('/api/updates/check');
+    _renderUpdateStatus(s);
+    if (!s.update_available) toast('Already up to date', 'success', 3000);
+  } catch (err) {
+    toast(err.message, 'error', 5000);
+  } finally { btnDone(btn); }
+}
+
+async function applyUpdate() {
+  if (!confirm('Apply update now? Recording will pause for ~20 seconds while the service restarts.')) return;
+  const btn = document.getElementById('btn-apply-update');
+  btnLoad(btn, '⟳ Applying…');
+  try {
+    await api.post('/api/updates/apply');
+    document.getElementById('upd-status').textContent = '⟳ Applying update — service will restart shortly…';
+    btn.style.display = 'none';
+    toast('Update applying — page will reconnect automatically', 'success', 8000);
+  } catch (err) {
+    toast(err.message, 'error', 5000);
+    btnDone(btn);
+  }
 }
 
 function _mqttModeChanged(mode) {
