@@ -2250,6 +2250,7 @@ async function renderSettings() {
         <div class="form-group" style="width:200px">
           <label>Check interval</label>
           <select id="upd-interval">
+            <option value="0.25">Every 15 minutes</option>
             <option value="1">Every hour</option>
             <option value="6">Every 6 hours</option>
             <option value="24">Daily</option>

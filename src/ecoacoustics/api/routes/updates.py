@@ -172,7 +172,7 @@ async def update_checker_loop() -> None:
             except Exception as exc:
                 _log.warning("Auto-update check failed: %s", exc)
 
-        interval_hours = float(cfg.get("check_interval_hours", 1))
+        interval_hours = float(cfg.get("check_interval_hours", 0.25))
         await asyncio.sleep(max(0.25, interval_hours) * 3600)
 
 
@@ -182,7 +182,7 @@ def get_update_status():
     return {
         "enabled":              cfg.get("enabled", True),
         "auto_apply":           cfg.get("auto_apply", True),
-        "check_interval_hours": cfg.get("check_interval_hours", 1),
+        "check_interval_hours": cfg.get("check_interval_hours", 0.25),
         **_state,
     }
 
