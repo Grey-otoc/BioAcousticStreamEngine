@@ -96,10 +96,10 @@ def _generate_spectrogram_png(wav_path: Path) -> bytes:
         librosa.display.specshow(
             S_db, sr=sr, hop_length=hop,
             x_axis="time", y_axis="hz",
-            fmin=fmin, fmax=fmax,
             ax=ax, cmap="inferno",
             vmin=-70, vmax=0,
         )
+        ax.set_ylim(fmin, fmax)   # fmin/fmax only work for mel/CQT axes; set manually for Hz
         ax.set_xlabel("Time (s)", color="#777", fontsize=7, labelpad=2)
         ax.set_ylabel("", labelpad=0)
         ax.yaxis.set_major_formatter(FuncFormatter(
