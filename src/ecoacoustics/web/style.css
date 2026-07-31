@@ -212,6 +212,7 @@ tr:hover td { background: var(--surface2); }
 .clip-card {
   background: var(--surface2); border-radius: var(--radius);
   border: 1px solid var(--border); overflow: hidden;
+  flex-shrink: 0;  /* prevent flex shrinkage when many cards exceed the container height */
 }
 .clip-row {
   display: flex; align-items: center; gap: 12px;

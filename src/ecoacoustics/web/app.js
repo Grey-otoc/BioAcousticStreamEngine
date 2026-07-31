@@ -1428,6 +1428,52 @@ function filterClips(key, btn) {
   loadSpeciesList(key);
 }
 
+const _CLIPS_PAGE_SIZE = 20;
+let _clipsAll = [];       // full list for current species
+let _clipsShown = 0;      // how many are currently rendered
+let _clipsDir = '';
+
+function _clipCardHtml(c, encodedDir) {
+  const batNote = c.sample_rate > 48000
+    ? `<br><span style="font-size:0.7rem;color:var(--muted)">🦇 ${(c.sample_rate/1000).toFixed(0)}kHz → pitched down for playback</span>`
+    : '';
+  const specUrl = c.spectrogram_url || '';
+  return `<div class="clip-card">
+    <div class="clip-row">
+      <div class="clip-meta">${ukDate(c.date)} ${c.time}<br><span class="conf ${confClass(c.confidence)}">${Math.round(c.confidence * 100)}% conf</span>${batNote}</div>
+      <audio controls src="${c.url}" preload="none"></audio>
+      <a class="btn btn-sm btn-outline" href="${c.download_url}" download title="Download original WAV">↓</a>
+      <button class="btn btn-sm btn-danger" onclick="deleteClip('${encodedDir}','${encodeURIComponent(c.filename)}',this)">✕</button>
+    </div>
+    ${specUrl ? `<img class="clip-spec" src="${specUrl}" loading="lazy" alt="Spectrogram"
+      onclick="window.open('${specUrl}','_blank')"
+      onerror="this.style.display='none'">` : ''}
+  </div>`;
+}
+
+function _renderClipsPage(grid, encodedDir, append = false) {
+  const batch = _clipsAll.slice(_clipsShown, _clipsShown + _CLIPS_PAGE_SIZE);
+  const html = batch.map(c => _clipCardHtml(c, encodedDir)).join('');
+
+  // Remove existing "Load more" button before appending
+  grid.querySelector('.btn-load-more')?.remove();
+
+  if (append) {
+    grid.insertAdjacentHTML('beforeend', html);
+  } else {
+    grid.innerHTML = html;
+  }
+  _clipsShown += batch.length;
+
+  if (_clipsShown < _clipsAll.length) {
+    const remaining = _clipsAll.length - _clipsShown;
+    grid.insertAdjacentHTML('beforeend',
+      `<button class="btn btn-outline btn-sm btn-load-more" style="align-self:center;margin:8px 0"
+        onclick="loadMoreClips()">Load ${Math.min(remaining, _CLIPS_PAGE_SIZE)} more (${remaining} remaining)</button>`
+    );
+  }
+}
+
 async function loadClips(dir, name) {
   document.querySelectorAll('.species-item').forEach(el =>
     el.classList.toggle('active', el.dataset.dir === dir)
@@ -1435,28 +1481,21 @@ async function loadClips(dir, name) {
   document.getElementById('clips-title').textContent = name;
   const grid = document.getElementById('clips-grid');
   grid.innerHTML = '<div class="empty">Loading...</div>';
+  _clipsAll = [];
+  _clipsShown = 0;
+  _clipsDir = dir;
   try {
     const data = await api.get(`/api/clips/${dir}`);
     if (!data.clips.length) { grid.innerHTML = '<div class="empty">No clips for this species.</div>'; return; }
-    const encodedDir = encodeURIComponent(dir);
-    grid.innerHTML = data.clips.map(c => {
-      const batNote = c.sample_rate > 48000
-        ? `<br><span style="font-size:0.7rem;color:var(--muted)">🦇 ${(c.sample_rate/1000).toFixed(0)}kHz → pitched down for playback</span>`
-        : '';
-      const specUrl = c.spectrogram_url || '';
-      return `<div class="clip-card">
-        <div class="clip-row">
-          <div class="clip-meta">${ukDate(c.date)} ${c.time}<br><span class="conf ${confClass(c.confidence)}">${Math.round(c.confidence * 100)}% conf</span>${batNote}</div>
-          <audio controls src="${c.url}" preload="none"></audio>
-          <a class="btn btn-sm btn-outline" href="${c.download_url}" download title="Download original WAV">↓</a>
-          <button class="btn btn-sm btn-danger" onclick="deleteClip('${encodedDir}','${encodeURIComponent(c.filename)}',this)">✕</button>
-        </div>
-        ${specUrl ? `<img class="clip-spec" src="${specUrl}" loading="lazy" alt="Spectrogram"
-          onclick="window.open('${specUrl}','_blank')"
-          onerror="this.style.display='none'">` : ''}
-      </div>`;
-    }).join('');
+    _clipsAll = data.clips;
+    _renderClipsPage(grid, encodeURIComponent(dir));
   } catch (err) { grid.innerHTML = `<div class="empty" style="color:var(--danger)">${err.message}</div>`; }
+}
+
+function loadMoreClips() {
+  const grid = document.getElementById('clips-grid');
+  if (!grid) return;
+  _renderClipsPage(grid, encodeURIComponent(_clipsDir), true);
 }
 
 async function deleteClip(dir, filename, btn) {
